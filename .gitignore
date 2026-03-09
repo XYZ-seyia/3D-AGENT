@@ -3,3 +3,11 @@ node_modules/
 dist/
 build/
 *.log
+.env
+.env.*
+coverage/
+.idea/
+.vscode/
+.cursor/plans/
+tmp/
+temp/

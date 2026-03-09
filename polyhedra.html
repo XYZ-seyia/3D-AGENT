@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>正多面体参数化激光切割生成器</title>
+  <link rel="stylesheet" href="css/polyhedra.css">
+</head>
+<body>
+
+  <canvas id="viewport"></canvas>
+
+  <!-- 右侧控制面板 -->
+  <aside id="controls">
+    <h2>正多面体生成器</h2>
+
+    <label>多面体类型</label>
+    <select id="solidType">
+      <option value="tetrahedron">正四面体 (4面)</option>
+      <option value="cube" selected>正六面体 (6面)</option>
+      <option value="octahedron">正八面体 (8面)</option>
+      <option value="dodecahedron">正十二面体 (12面)</option>
+      <option value="icosahedron">正二十面体 (20面)</option>
+    </select>
+
+    <label>边长 <span id="edgeLenVal">60</span> mm</label>
+    <input type="range" id="edgeLength" min="20" max="200" value="60" step="1">
+
+    <label>板厚 <span id="thicknessVal">3</span> mm</label>
+    <input type="range" id="thickness" min="1" max="10" value="3" step="0.5">
+
+    <label>爆炸图</label>
+    <input type="range" id="explode" min="0" max="1" value="0" step="0.01">
+    <button id="explodeBtn">展开</button>
+
+    <hr>
+    <p class="hint">双击面板进入面编辑模式</p>
+    <p class="hint">悬停面板显示信息</p>
+  </aside>
+
+  <!-- 面板信息悬浮提示 -->
+  <div id="tooltip" class="tooltip"></div>
+
+  <!-- 面编辑器覆盖层 -->
+  <div id="faceEditorOverlay" class="editor-overlay hidden">
+    <div class="editor-header">
+      <span id="editorTitle">面编辑器</span>
+      <button id="editorClose">✕ 关闭</button>
+    </div>
+    <div class="editor-body">
+      <canvas id="editorCanvas"></canvas>
+      <div class="editor-toolbar">
+        <button data-tool="rect" title="矩形">▭</button>
+        <button data-tool="circle" title="圆形">○</button>
+        <button data-tool="star" title="星形">☆</button>
+        <button data-tool="text" title="文字">T</button>
+        <button data-tool="delete" title="删除选中">✕</button>
+      </div>
+      <div class="editor-props" id="editorProps">
+        <label>模式
+          <select id="decoMode">
+            <option value="cut">切割 (镂空)</option>
+            <option value="engrave">雕刻 (浅凹)</option>
+          </select>
+        </label>
+        <label>X <input type="number" id="decoPosX" step="1"></label>
+        <label>Y <input type="number" id="decoPosY" step="1"></label>
+        <label>大小 <input type="number" id="decoSize" step="1" min="1"></label>
+        <label>旋转° <input type="number" id="decoRotation" step="5"></label>
+        <button id="applyDeco">应用到 3D</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="js/poly-main.js"></script>
+</body>
+</html>

@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>装配编辑器 — 创作者模式</title>
+<style>
+:root {
+  --bg:#0d0d14; --surface:#13131e; --surface2:#1c1c2e; --border:#2a2a42;
+  --accent:#6366f1; --accent2:#8b5cf6; --cyan:#06b6d4; --green:#10b981;
+  --orange:#f59e0b; --red:#ef4444; --text:#e2e2f0; --text2:#8080a8;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang SC',sans-serif;
+  height:100vh;overflow:hidden;user-select:none;}
+
+/* Top bar */
+#topbar{height:46px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;background:var(--surface);border-bottom:1px solid var(--border);z-index:10;position:relative;}
+.logo{font-size:14px;font-weight:800;}.logo span{color:var(--accent);}
+.mode-tag{font-size:11px;padding:2px 9px;border-radius:20px;background:rgba(99,102,241,.15);
+  color:var(--accent);border:1px solid rgba(99,102,241,.3);}
+.tbcenter{display:flex;align-items:center;gap:6px;}
+.tbright{display:flex;align-items:center;gap:8px;}
+.tbtn{height:28px;padding:0 11px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface2);color:var(--text2);
+  display:flex;align-items:center;gap:4px;transition:all .15s;font-family:inherit;}
+.tbtn:hover{border-color:var(--accent);color:var(--accent);}
+.tbtn.active{background:rgba(99,102,241,.2);border-color:var(--accent);color:var(--accent);}
+.view-switch{display:flex;gap:6px;margin-left:8px}
+.conn-pill{height:28px;padding:0 10px;border-radius:7px;font-size:11px;color:var(--text2);
+  border:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;gap:5px;}
+.cpulse{width:7px;height:7px;border-radius:50%;background:var(--green);}
+#btn-pub{height:30px;padding:0 14px;border-radius:8px;font-size:12px;font-weight:700;
+  cursor:pointer;border:none;background:var(--accent);color:#fff;transition:background .15s;font-family:inherit;}
+#btn-pub:hover{background:var(--accent2);}
+
+/* Main layout */
+#main{display:flex;height:calc(100vh - 46px);}
+
+/* Left panel */
+#lpanel{width:192px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;}
+.lsec{padding:10px 10px 12px;border-bottom:1px solid var(--border);}
+.lsec-title{font-size:10px;color:var(--text2);font-weight:700;letter-spacing:1px;
+  text-transform:uppercase;margin-bottom:8px;}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.tpbtn{padding:7px 4px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface2);color:var(--text);
+  text-align:center;transition:all .15s;font-family:inherit;display:flex;
+  flex-direction:column;align-items:center;gap:2px;}
+.tpbtn span:first-child{font-size:16px;}
+.tpbtn:hover{border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,.1);}
+.addpanel{width:100%;padding:8px;border-radius:8px;font-size:11px;font-weight:700;
+  cursor:pointer;border:1px dashed var(--border);background:transparent;color:var(--text2);
+  transition:all .15s;font-family:inherit;margin-top:6px;}
+.addpanel:hover{border-color:var(--accent);color:var(--accent);}
+
+.clist{flex:1;overflow-y:auto;padding:8px;}
+.citem{padding:7px 9px;border-radius:7px;margin-bottom:5px;font-size:11px;
+  background:var(--surface2);border:1px solid var(--border);cursor:pointer;transition:border-color .15s;}
+.citem:hover{border-color:var(--cyan);}
+.citem-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
+.clabel{font-weight:600;color:var(--cyan);}
+.jtag{font-size:10px;padding:1px 5px;border-radius:4px;
+  background:rgba(6,182,212,.15);color:var(--cyan);}
+.cdetail{color:var(--text2);line-height:1.4;}
+
+/* Viewport */
+#vp{flex:1;position:relative;overflow:hidden;}
+#c3d{width:100%;height:100%;display:block;cursor:default;}
+#c3d.drag{cursor:grabbing;}
+#c3d.hover{cursor:pointer;}
+
+/* Snap badge */
+#snapbadge{position:absolute;top:12px;left:50%;transform:translateX(-50%) scale(.9);
+  background:rgba(6,182,212,.12);border:1px solid var(--cyan);color:var(--cyan);
+  padding:5px 16px;border-radius:20px;font-size:12px;font-weight:700;
+  opacity:0;transition:all .2s;pointer-events:none;backdrop-filter:blur(8px);white-space:nowrap;}
+#snapbadge.on{opacity:1;transform:translateX(-50%) scale(1);}
+
+/* Joint flash */
+@keyframes jflash{0%{opacity:0}30%{opacity:1}100%{opacity:0}}
+#jflash{position:absolute;inset:0;pointer-events:none;border:2px solid transparent;border-radius:0;}
+#jflash.on{animation:jflash .5s ease-out;border-color:var(--cyan);}
+
+/* Bottom toolbar */
+#vptb{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  display:flex;gap:5px;background:rgba(13,13,20,.88);backdrop-filter:blur(12px);
+  border:1px solid var(--border);border-radius:11px;padding:5px;}
+.vbtn{height:28px;padding:0 11px;border-radius:7px;font-size:11px;font-weight:600;
+  cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2);
+  display:flex;align-items:center;gap:4px;transition:all .15s;font-family:inherit;}
+.vbtn:hover{background:rgba(99,102,241,.2);border-color:var(--accent);color:var(--accent);}
+.vbtn.active{background:rgba(99,102,241,.2);border-color:var(--accent);color:var(--accent);}
+.vbtn.danger:hover{background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red);}
+
+/* Hint */
+#hint{position:absolute;top:12px;right:12px;font-size:11px;color:var(--text2);
+  background:rgba(13,13,20,.75);backdrop-filter:blur(8px);border:1px solid var(--border);
+  border-radius:8px;padding:8px 11px;line-height:1.7;}
+.k{display:inline-block;background:var(--surface2);border:1px solid var(--border);
+  padding:1px 5px;border-radius:4px;font-size:10px;}
+
+/* Right panel */
+#rpanel{width:232px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;}
+.rsec{padding:11px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.rtitle{font-size:10px;color:var(--text2);font-weight:700;letter-spacing:1px;
+  text-transform:uppercase;margin-bottom:8px;}
+.prow{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.plabel{font-size:12px;color:var(--text2);}
+.pinput{width:76px;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  padding:3px 7px;border-radius:6px;font-size:12px;font-family:inherit;text-align:right;outline:none;}
+.pinput:focus{border-color:var(--accent);}
+select.pinput{text-align:left}
+.erow{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;}
+.echip{font-size:10px;padding:2px 7px;border-radius:5px;background:var(--surface2);
+  border:1px solid var(--border);color:var(--text2);}
+.echip.on{background:rgba(6,182,212,.1);border-color:var(--cyan);color:var(--cyan);}
+.empty{font-size:12px;color:var(--text2);text-align:center;padding:18px 10px;line-height:1.5;}
+.subnote{font-size:11px;color:var(--text2);line-height:1.5;margin-top:8px}
+
+/* Rotation picker */
+.rotpicker{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px;}
+.rotbtn{padding:5px 4px;border-radius:7px;font-size:10px;cursor:pointer;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text2);text-align:center;font-family:inherit;transition:all .15s;}
+.rotbtn:hover{border-color:var(--accent);color:var(--accent);}
+.rotbtn.active{background:rgba(99,102,241,.2);border-color:var(--accent);color:var(--accent);}
+
+/* JSON */
+.jsec{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+.jhead{display:flex;align-items:center;justify-content:space-between;
+  padding:7px 11px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.jtitle{font-size:10px;color:var(--text2);font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+.jlive{font-size:10px;color:var(--green);}
+#jbody{flex:1;overflow-y:auto;padding:8px 11px;font-family:'SF Mono','Fira Code',monospace;font-size:10px;line-height:1.6;}
+.jk{color:#f97316;}.js{color:var(--green);}.jn{color:var(--cyan);}.jb{color:var(--accent2);}
+
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+</style>
+</head>
+<body>
+<header id="topbar">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="logo">Laser<span>3D</span></div>
+    <span class="mode-tag">创作者模式</span>
+  </div>
+  <div class="tbcenter">
+    <button class="tbtn" id="btn-rot0" title="竖板·朝前 (1)" onclick="setRotPreset(0)">⬜ 竖板·前</button>
+    <button class="tbtn" id="btn-rot1" title="竖板·朝侧 (2)" onclick="setRotPreset(1)">⬛ 竖板·侧</button>
+    <button class="tbtn" id="btn-rot2" title="水平板 (3)" onclick="setRotPreset(2)">▬ 水平板</button>
+    <div class="view-switch">
+      <button class="tbtn active" id="btn-view-macro" onclick="setViewMode('macro')">◫ 宏视图</button>
+      <button class="tbtn" id="btn-view-expanded" onclick="setViewMode('expanded')">▦ 展开视图</button>
+    </div>
+    <div class="conn-pill"><span class="cpulse"></span><span id="ccount">0</span> 个卡槽</div>
+  </div>
+  <div class="tbright">
+    <button class="tbtn" onclick="clearAll()">清空</button>
+    <button id="btn-pub">发布生成器 →</button>
+  </div>
+</header>
+
+<div id="main">
+  <aside id="lpanel">
+    <div class="lsec">
+      <div class="lsec-title">生成器模板</div>
+      <div class="tgrid" id="macroTemplates"></div>
+    </div>
+    <div class="lsec">
+      <div class="lsec-title">添加面板</div>
+      <div class="tgrid">
+        <button class="tpbtn" onclick="addPreset('plank')"><span>▬</span><span>长板</span></button>
+        <button class="tpbtn" onclick="addPreset('square')"><span>◼</span><span>方板</span></button>
+        <button class="tpbtn" onclick="addPreset('tall')"><span>▮</span><span>高板</span></button>
+        <button class="tpbtn" onclick="addPreset('wide')"><span>▭</span><span>宽板</span></button>
+      </div>
+      <button class="addpanel" onclick="addPreset('plank')">+ 自定义面板</button>
+    </div>
+    <div class="lsec">
+      <div class="lsec-title">场景预设</div>
+      <div class="tgrid">
+        <button class="tpbtn" onclick="loadScene('lshape')"><span>🔲</span><span>L形</span></button>
+        <button class="tpbtn" onclick="loadScene('box3')"><span>📦</span><span>三板</span></button>
+        <button class="tpbtn" onclick="loadScene('shelf')"><span>🗂</span><span>书架</span></button>
+        <button class="tpbtn" onclick="loadScene('cross')"><span>✛</span><span>十字</span></button>
+      </div>
+    </div>
+    <div class="lsec" style="border-bottom:none;padding-bottom:5px">
+      <div class="lsec-title">卡槽连接 (<span id="ccountleft">0</span>)</div>
+    </div>
+    <div class="clist" id="clist"></div>
+  </aside>
+
+  <div id="vp">
+    <canvas id="c3d"></canvas>
+    <div id="snapbadge">⚡ 接触 — 松手生成卡槽</div>
+    <div id="jflash"></div>
+    <div id="vptb">
+      <button class="vbtn" onclick="resetCam()">⌖ 重置视角</button>
+      <button class="vbtn active" id="btn-grid" onclick="toggleGrid()">⊞ 网格</button>
+      <button class="vbtn" id="btn-xray" onclick="toggleXray()">◎ 透视</button>
+      <button class="vbtn danger" onclick="delSelected()" id="btn-del">⌫ 删除</button>
+    </div>
+    <div id="hint">
+      <b>拖动面板</b>靠近另一块板的边缘<br>
+      接触时自动生成 <span style="color:var(--cyan)">指接卡槽</span><br>
+      分离后卡槽消失<br>
+      <kbd class="k">1/2/3</kbd> 旋转 &nbsp;<kbd class="k">Del</kbd> 删除 &nbsp;<kbd class="k">Alt+拖</kbd> 复制
+    </div>
+  </div>
+
+  <aside id="rpanel">
+    <div class="rsec" id="rsec-params">
+      <div class="rtitle" id="propTitle">对象属性</div>
+      <div class="empty" id="rempty">点击选择一个对象</div>
+      <div id="panelFields" style="display:none">
+        <div class="prow">
+          <span class="plabel">宽度 (mm)</span>
+          <input class="pinput" id="pw" type="number" min="20" max="400" oninput="upSel('w',+this.value)">
+        </div>
+        <div class="prow">
+          <span class="plabel">高度 (mm)</span>
+          <input class="pinput" id="ph" type="number" min="20" max="400" oninput="upSel('h',+this.value)">
+        </div>
+        <div class="prow">
+          <span class="plabel">厚度 (mm)</span>
+          <input class="pinput" id="pt" type="number" min="2" max="20" oninput="upSel('t',+this.value)">
+        </div>
+        <div style="margin-top:6px">
+          <div style="font-size:11px;color:var(--text2);margin-bottom:4px">朝向</div>
+          <div class="rotpicker">
+            <button class="rotbtn" id="rp0" onclick="setRotPreset(0)">⬜<br>竖·前</button>
+            <button class="rotbtn" id="rp1" onclick="setRotPreset(1)">⬛<br>竖·侧</button>
+            <button class="rotbtn" id="rp2" onclick="setRotPreset(2)">▬<br>水平</button>
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <div style="font-size:11px;color:var(--text2);margin-bottom:4px">边缘状态</div>
+          <div class="erow" id="echips"></div>
+        </div>
+      </div>
+      <div id="boxFields" style="display:none">
+        <div class="prow">
+          <span class="plabel">长度 (mm)</span>
+          <input class="pinput" id="bl" type="number" min="20" max="400" oninput="upBoxParam('length',+this.value)">
+        </div>
+        <div class="prow">
+          <span class="plabel">宽度 (mm)</span>
+          <input class="pinput" id="bw" type="number" min="20" max="400" oninput="upBoxParam('width',+this.value)">
+        </div>
+        <div class="prow">
+          <span class="plabel">高度 (mm)</span>
+          <input class="pinput" id="bh" type="number" min="20" max="400" oninput="upBoxParam('height',+this.value)">
+        </div>
+        <div class="prow">
+          <span class="plabel">厚度 (mm)</span>
+          <input class="pinput" id="bt" type="number" min="2" max="20" oninput="upBoxParam('thickness',+this.value)">
+        </div>
+        <div class="prow">
+          <span class="plabel">接合类型</span>
+          <select class="pinput" id="bjoint" onchange="upBoxJoint(this.value)">
+            <option value="finger">指接榫</option>
+            <option value="tab">插榫</option>
+          </select>
+        </div>
+        <div class="subnote" id="boxFaceHint">宏视图下，点击任一展开面都会选中整个盒子宏原语。</div>
+      </div>
+    </div>
+    <div class="jsec">
+      <div class="jhead">
+        <span class="jtitle">JSON 模型</span>
+        <span class="jlive">● 实时</span>
+      </div>
+      <div id="jbody"></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+if (location.protocol === 'file:') {
+  window.addEventListener('DOMContentLoaded', () => {
+    const note = document.createElement('div');
+    note.style.cssText = 'position:fixed;top:12px;left:12px;right:12px;z-index:9999;padding:12px 14px;border-radius:10px;background:rgba(255,190,92,.96);color:#201400;font:12px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.25)';
+    note.innerHTML = '当前是通过 <b>file://</b> 直接打开。这个页面现在依赖 <code>js/core</code> 本地模块，请改用本地静态服务器访问，例如：<code>python3 -m http.server 8123</code>，然后打开 <code>http://127.0.0.1:8123/editor-creator.html</code>。';
+    document.body.appendChild(note);
+  });
+}
+</script>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createModel, normalizeModel, getPrimitiveById, makeId } from './js/core/schema.js';
+import {
+  addPrimitive,
+  addRectPanel,
+  addConnection,
+  removePrimitive,
+  movePrimitive,
+  rotatePrimitive,
+  updatePrimitiveParams,
+  clearAutoConnections,
+  detectAutoConnections,
+  computeRectWorldEdges,
+} from './js/core/model-ops.js';
+import { compileModelToAssembly } from './js/core/macro-models.js';
+import { renderAssembly } from './js/core/assembly-renderer.js';
+import { listMacroTemplates, createMacroTemplatePrimitive } from './js/core/macro-registry.js';
+
+// ─────────────────────────────────────────────
+//  Inlined engine (joint-kernel + joint-policies)
+// ─────────────────────────────────────────────
+function resolveJointDepth({thickness, kerf=0}) { return thickness + kerf/2; }
+
+function normalizeEdgeStyle(s) {
+  if (!s) return {jointKind:'flat',edgeType:'flat',kerf:0};
+  if (typeof s === 'string') return s==='flat'?{jointKind:'flat',edgeType:'flat',kerf:0}:{jointKind:'finger',edgeType:s,kerf:0};
+  return {jointKind:s.jointKind||'finger',edgeType:s.edgeType||'flat',kerf:+(s.kerf||0)};
+}
+
+function calcToothCount(len,t) { let n=Math.max(3,Math.floor(len/(3*t))); return n%2?n:n+1; }
+function add2(a,b){return[a[0]+b[0],a[1]+b[1]];}
+function sc2(v,s){return[v[0]*s,v[1]*s];}
+function nm2(v){const l=Math.hypot(v[0],v[1])||1;return[v[0]/l,v[1]/l];}
+
+function fingerPts(s,e,ow,t,style) {
+  const len=Math.hypot(e[0]-s[0],e[1]-s[1]);
+  const n=calcToothCount(len,t);
+  const d=resolveJointDepth({thickness:t,kerf:style.kerf||0});
+  const seg=len/n;
+  const dir=nm2([e[0]-s[0],e[1]-s[1]]);
+  const pts=[];
+  for(let i=0;i<n;i++){
+    const p0=add2(s,sc2(dir,i*seg)), p1=add2(s,sc2(dir,(i+1)*seg));
+    const tab=style.edgeType==='A'?i%2===0:i%2!==0;
+    if(tab) pts.push(p0,add2(p0,sc2(ow,d)),add2(p1,sc2(ow,d)),p1);
+    else pts.push(p0);
+  }
+  return pts;
+}
+
+function edgePts(s,e,ow,t,raw) {
+  const st=normalizeEdgeStyle(raw);
+  if(st.jointKind==='flat'||st.edgeType==='flat') return[[s[0],s[1]]];
+  return fingerPts(s,e,ow,t,st);
+}
+
+function buildRectShape({width:w,height:h,thickness:t,edges:E}) {
+  const pts=[
+    ...edgePts([0,0],[w,0],[0,-1],t,E.bottom),
+    ...edgePts([w,0],[w,h],[1,0],t,E.right),
+    ...edgePts([w,h],[0,h],[0,1],t,E.top),
+    ...edgePts([0,h],[0,0],[-1,0],t,E.left),
+  ];
+  const d=[pts[0]];
+  for(let i=1;i<pts.length;i++){
+    const p=d[d.length-1],c=pts[i];
+    if(Math.abs(p[0]-c[0])>.001||Math.abs(p[1]-c[1])>.001) d.push(c);
+  }
+  const sh=new THREE.Shape();
+  sh.moveTo(d[0][0],d[0][1]);
+  for(let i=1;i<d.length;i++) sh.lineTo(d[i][0],d[i][1]);
+  sh.closePath();
+  return sh;
+}
+
+// ─────────────────────────────────────────────
+//  Constants
+// ─────────────────────────────────────────────
+const SNAP_DIST    = 10;  // joint appears (edge-pair distance sum ≤ this)
+const RELEASE_DIST = 22;  // joint disappears (hysteresis)
+const PREVIEW_DIST = 32;  // approach glow
+
+// Rotation presets: [rx,ry,rz] in radians
+const ROT_PRESETS = [
+  [0, 0, 0],                 // 0: vertical, face toward +Z
+  [0, Math.PI/2, 0],         // 1: vertical, face toward +X  (side panel)
+  [-Math.PI/2, 0, 0],        // 2: horizontal, face toward +Y (shelf/bottom)
+];
+const ROT_LABELS = ['竖·前','竖·侧','水平'];
+
+// ─────────────────────────────────────────────
+//  Model (canonical model from js/core)
+// ─────────────────────────────────────────────
+let model = createModel({ primitives: [], connections: [], meta: {} });
+let selectedId = null;
+let selectedPanelId = null;
+let viewMode = 'macro';
+let currentAssembly = { panels: [], connections: [] };
+const compiledPanelIndex = new Map();
+
+const COLORS = [0x6366f1,0x10b981,0xf59e0b,0xef4444,0x8b5cf6,0x06b6d4,0xec4899,0x84cc16];
+
+function nextSpawn() {
+  const n = model.primitives.length;
+  return n * 140;
+}
+
+function addPanel(cfg = {}) {
+  const id = cfg.id || makeId('panel');
+  const prim = addRectPanel(model, {
+    id,
+    label: cfg.label || `面板${model.primitives.length + 1}`,
+    width: cfg.w ?? 120,
+    height: cfg.h ?? 100,
+    thickness: cfg.t ?? 6,
+    pose: {
+      position: cfg.pos ? [...cfg.pos] : [nextSpawn(), 0, 0],
+      rotation: cfg.rot ? [...cfg.rot] : [...ROT_PRESETS[0]],
+    },
+    color: cfg.color ?? COLORS[model.primitives.length % COLORS.length],
+  });
+  return prim;
+}
+
+function getP(id) {
+  return getPrimitiveById(model, id);
+}
+
+function getSelectedPrimitive() {
+  return selectedId ? getPrimitiveById(model, selectedId) : null;
+}
+
+function getCompiledPanelInfo(panelId) {
+  return compiledPanelIndex.get(panelId) || null;
+}
+
+function getSourcePrimitiveId(panelId) {
+  return getCompiledPanelInfo(panelId)?.sourcePrimitiveId || panelId;
+}
+
+function getFirstRenderedPanelId(primitiveId) {
+  for (const info of compiledPanelIndex.values()) {
+    if (info.sourcePrimitiveId === primitiveId) return info.panelId;
+  }
+  return primitiveId;
+}
+
+function addMacroTemplate(templateId) {
+  const primitive = createMacroTemplatePrimitive(templateId, {
+    pose: { position: [nextSpawn(), 0, 0], rotation: [0, 0, 0] },
+  });
+  if (!primitive) return null;
+  addPrimitive(model, primitive);
+  return primitive;
+}
+
+function duplicatePrimitiveInstance(sourcePrimitive) {
+  if (!sourcePrimitive) return null;
+  if (sourcePrimitive.primitive === 'panel') {
+    return addPanel({
+      label: `${sourcePrimitive.label || '面板'}*`,
+      w: sourcePrimitive.shape?.width,
+      h: sourcePrimitive.shape?.height,
+      t: sourcePrimitive.thickness,
+      pos: [
+        (sourcePrimitive.pose?.position?.[0] || 0) + 20,
+        sourcePrimitive.pose?.position?.[1] || 0,
+        (sourcePrimitive.pose?.position?.[2] || 0) + 20,
+      ],
+      rot: sourcePrimitive.pose?.rotation ? [...sourcePrimitive.pose.rotation] : [...ROT_PRESETS[0]],
+      color: sourcePrimitive.style?.color,
+    });
+  }
+
+  const duplicated = structuredClone(sourcePrimitive);
+  duplicated.id = makeId(sourcePrimitive.primitive);
+  duplicated.label = `${sourcePrimitive.label || sourcePrimitive.primitive}*`;
+  duplicated.pose = duplicated.pose || { position: [0, 0, 0], rotation: [0, 0, 0] };
+  duplicated.pose.position = [
+    (duplicated.pose.position?.[0] || 0) + 20,
+    duplicated.pose.position?.[1] || 0,
+    (duplicated.pose.position?.[2] || 0) + 20,
+  ];
+  addPrimitive(model, duplicated);
+  return duplicated;
+}
+
+// ─────────────────────────────────────────────
+//  Three.js
+// ─────────────────────────────────────────────
+const canvas = document.getElementById('c3d');
+const renderer = new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setClearColor(0x07070f);
+renderer.shadowMap.enabled = true;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42,1,.1,8000);
+camera.position.set(180, 220, 380);
+
+const orbit = new OrbitControls(camera,canvas);
+orbit.target.set(60,60,0);
+orbit.enableDamping = true;
+orbit.dampingFactor = .08;
+orbit.update();
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff,0.55));
+const sun=new THREE.DirectionalLight(0xffffff,1.0); sun.position.set(300,500,300);
+sun.castShadow=true; scene.add(sun);
+const fill=new THREE.DirectionalLight(0x8090ff,0.35); fill.position.set(-200,-100,-200); scene.add(fill);
+
+// Grid
+let gridHelper = new THREE.GridHelper(700,35,0x1a1a2e,0x14142a);
+gridHelper.position.y=-1; scene.add(gridHelper); let gridOn=true;
+
+// Floor (receives shadow)
+const floorGeo = new THREE.PlaneGeometry(700,700);
+const floorMat = new THREE.ShadowMaterial({opacity:.18});
+const floor = new THREE.Mesh(floorGeo,floorMat);
+floor.rotation.x=-Math.PI/2; floor.position.y=-1; floor.receiveShadow=true;
+scene.add(floor);
+
+// Groups
+const panelGroup = new THREE.Group(); scene.add(panelGroup);
+const hlGroup = new THREE.Group(); scene.add(hlGroup);
+let panelMeshes = []; // flat list for raycasting, refreshed in rebuildFromModel
+
+let xray = false;
+
+// ─────────────────────────────────────────────
+//  Edge detection (3D) — uses model-ops for primitives
+// ─────────────────────────────────────────────
+function worldEdges(panel) {
+  return computeRectWorldEdges(panel);
+}
+
+function scoreEdgePair(ea,eb) {
+  // Face normals must be roughly perpendicular (joint makes sense for 90° assemblies)
+  if(Math.abs(ea.normal.dot(eb.normal))>0.25) return Infinity;
+  const d1=ea.start.distanceTo(eb.start)+ea.end.distanceTo(eb.end);
+  const d2=ea.start.distanceTo(eb.end)+ea.end.distanceTo(eb.start);
+  return Math.min(d1,d2);
+}
+
+// Returns { snapped:[], nearby:[] } from model.primitives (panel only)
+function detectProximity() {
+  const snapped = [], nearby = [];
+  const panels = model.primitives.filter(p => p.primitive === 'panel' && p.shape?.type === 'rect');
+  for (let i = 0; i < panels.length; i++) {
+    for (let j = i + 1; j < panels.length; j++) {
+      const pA = panels[i], pB = panels[j];
+      const eA = worldEdges(pA), eB = worldEdges(pB);
+      let best = Infinity, bA = null, bB = null;
+      for (const ea of eA) for (const eb of eB) {
+        const s = scoreEdgePair(ea, eb);
+        if (s < best) { best = s; bA = ea; bB = eb; }
+      }
+      if (best <= SNAP_DIST) snapped.push({ panelA: pA.id, edgeA: bA.id, panelB: pB.id, edgeB: bB.id, score: best });
+      else if (best <= PREVIEW_DIST) nearby.push({ panelA: pA.id, edgeA: bA.id, panelB: pB.id, edgeB: bB.id, score: best });
+    }
+  }
+  return { snapped, nearby };
+}
+
+// Compute position to snap panel so that edge midpoints coincide
+function snapPos(panel, snap) {
+  const eA = worldEdges(panel);
+  const pB = getP(snap.otherId);
+  const eB = worldEdges(pB);
+  const ea = eA.find(e => e.id === snap.myEdge);
+  const eb = eB.find(e => e.id === snap.otherEdge);
+  const pos = panel.pose?.position || [0, 0, 0];
+  if (!ea || !eb) return pos;
+  const mA = new THREE.Vector3().addVectors(ea.start, ea.end).multiplyScalar(0.5);
+  const mB = new THREE.Vector3().addVectors(eb.start, eb.end).multiplyScalar(0.5);
+  const d = new THREE.Vector3().subVectors(mB, mA);
+  return [pos[0] + d.x, pos[1] + d.y, pos[2] + d.z];
+}
+
+// ─────────────────────────────────────────────
+//  Rendering (js/core compile + renderAssembly)
+// ─────────────────────────────────────────────
+function rebuildFromModel() {
+  panelGroup.clear();
+  panelMeshes = [];
+  compiledPanelIndex.clear();
+  currentAssembly = compileModelToAssembly(model);
+  for (const panel of currentAssembly.panels) {
+    compiledPanelIndex.set(panel.id, {
+      panelId: panel.id,
+      label: panel.label || panel.id,
+      panelKey: panel.meta?.panelKey || null,
+      sourcePrimitiveId: panel.meta?.sourcePrimitive || panel.id,
+      kind: panel.meta?.kind || 'panel',
+    });
+  }
+
+  const group = renderAssembly(currentAssembly);
+  group.traverse(c => {
+    if (c.isMesh && c.userData.panelId) {
+      panelMeshes.push(c);
+      const panelId = c.userData.panelId;
+      const sourcePrimitiveId = getSourcePrimitiveId(panelId);
+      const sourcePrimitive = getPrimitiveById(model, sourcePrimitiveId);
+      const isExpandedSel = panelId === selectedPanelId;
+      const isMacroSel = sourcePrimitiveId === selectedId;
+      const isSel = viewMode === 'expanded' ? isExpandedSel : isMacroSel;
+      const isMacroSource = sourcePrimitive && sourcePrimitive.primitive !== 'panel';
+      const macroColor = sourcePrimitive?.style?.color ?? 0x818cf8;
+      const meshColor = c.material?.color?.getHex?.() ?? 0xaed581;
+      const baseColor = xray
+        ? 0x334155
+        : (viewMode === 'macro' && isMacroSource ? macroColor : meshColor);
+      if (c.material && !Array.isArray(c.material)) {
+        c.material.color.setHex(isSel ? 0x818cf8 : baseColor);
+        c.material.transparent = true;
+        c.material.opacity = xray ? 0.35 : (isSel ? 0.95 : (viewMode === 'macro' && isMacroSource ? 0.8 : 0.88));
+      }
+    }
+  });
+  panelGroup.add(group);
+}
+
+// ─────────────────────────────────────────────
+//  Highlights
+// ─────────────────────────────────────────────
+function drawEdgeLine(start, end, color, opacity=1) {
+  const pts=[start.clone(),end.clone()];
+  // Offset slightly toward camera
+  const toC=new THREE.Vector3().subVectors(camera.position,start).normalize().multiplyScalar(2);
+  pts[0].add(toC); pts[1].add(toC);
+  const geo=new THREE.BufferGeometry().setFromPoints(pts);
+  hlGroup.add(new THREE.Line(geo,new THREE.LineBasicMaterial({color,transparent:true,opacity})));
+}
+
+function updateHighlights(nearby, snapped) {
+  hlGroup.clear();
+  for (const c of nearby) {
+    for (const [pid, eid] of [[c.panelA, c.edgeA], [c.panelB, c.edgeB]]) {
+      const p = getP(pid); if (!p) continue;
+      const e = worldEdges(p).find(x => x.id === eid); if (!e) continue;
+      drawEdgeLine(e.start, e.end, 0xfbbf24, 0.6);
+    }
+  }
+  for (const c of snapped) {
+    for (const [pid, eid] of [[c.panelA, c.edgeA], [c.panelB, c.edgeB]]) {
+      const p = getP(pid); if (!p) continue;
+      const e = worldEdges(p).find(x => x.id === eid); if (!e) continue;
+      drawEdgeLine(e.start, e.end, 0x06b6d4, 1);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+//  Connection update — sync model.connections from geometry proximity
+// ─────────────────────────────────────────────
+let prevHash = '';
+
+function updateConnections(force = false) {
+  const { snapped, nearby } = detectProximity();
+  const hash = snapped.map(c => `${c.panelA}:${c.edgeA}:${c.panelB}:${c.edgeB}`).sort().join('|');
+
+  if (hash !== prevHash || force) {
+    clearAutoConnections(model);
+    for (const c of snapped) {
+      addConnection(model, {
+        panelA: c.panelA,
+        edgeA: c.edgeA,
+        panelB: c.panelB,
+        edgeB: c.edgeB,
+        joint: { kind: 'finger', kerf: 0, edgeTypes: ['A', 'B'] },
+        meta: { source: 'system', auto: true, score: c.score },
+      });
+    }
+    prevHash = hash;
+    rebuildFromModel();
+    const fl = document.getElementById('jflash');
+    if (fl) { fl.classList.remove('on'); void fl.offsetWidth; fl.classList.add('on'); }
+    updateConnList();
+    updateRightPanel();
+    updateJson();
+  }
+
+  updateHighlights(nearby, snapped);
+  document.getElementById('snapbadge').classList.toggle('on', snapped.length > 0 && isDragging);
+}
+
+// ─────────────────────────────────────────────
+//  Drag
+// ─────────────────────────────────────────────
+const ray = new THREE.Raycaster();
+const mpos = new THREE.Vector2();
+let isDragging=false, dragId=null;
+const dragPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+const dragOffset=new THREE.Vector3();
+let dragSnap=null;  // {otherId,myEdge,otherEdge}|null — current snap state
+let rawDragPos=[0,0,0]; // unsnapped position during drag
+
+function updateMouse(e) {
+  const r=canvas.getBoundingClientRect();
+  mpos.x=((e.clientX-r.left)/r.width)*2-1;
+  mpos.y=-((e.clientY-r.top)/r.height)*2+1;
+}
+
+function hitPanel(e) {
+  updateMouse(e);
+  ray.setFromCamera(mpos, camera);
+  const hits = ray.intersectObjects(panelMeshes);
+  return hits.length ? hits[0].object.userData.panelId : null;
+}
+
+function planePt(e) {
+  updateMouse(e);
+  ray.setFromCamera(mpos,camera);
+  const t=new THREE.Vector3();
+  ray.ray.intersectPlane(dragPlane,t);
+  return t;
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  const panelId = hitPanel(e);
+  if (!panelId) { deselect(); return; }
+  const primitiveId = getSourcePrimitiveId(panelId);
+
+  if (e.altKey) {
+    const src = getP(primitiveId);
+    const np = duplicatePrimitiveInstance(src);
+    if (!np) return;
+    selectedId = np.id;
+    rebuildFromModel();
+    selectedPanelId = getFirstRenderedPanelId(np.id);
+    rebuildFromModel();
+    updateConnList();
+    updateRightPanel();
+    startDrag(np.id, e);
+    return;
+  }
+
+  e.stopPropagation();
+  selectedId = primitiveId;
+  selectedPanelId = panelId;
+  rebuildFromModel();
+  updateRightPanel();
+  startDrag(primitiveId, e);
+});
+
+function startDrag(id, e) {
+  orbit.enabled = false;
+  isDragging = true;
+  dragId = id;
+  canvas.classList.add('drag');
+  const p = getP(id);
+  const pos = p?.pose?.position || [0, 0, 0];
+  dragPlane.constant = -pos[1];
+  const pt = planePt(e);
+  if (pt) dragOffset.set(pos[0] - pt.x, 0, pos[2] - pt.z);
+  rawDragPos = [...pos];
+  dragSnap = null;
+}
+
+canvas.addEventListener('mousemove', e => {
+  if (!isDragging || !dragId) {
+    canvas.classList.toggle('hover', !!hitPanel(e));
+    return;
+  }
+  const pt = planePt(e); if (!pt) return;
+  const p = getP(dragId); if (!p) return;
+  const py = (p.pose?.position || [0, 0, 0])[1];
+  const rx = pt.x + dragOffset.x, rz = pt.z + dragOffset.z;
+  rawDragPos = [rx, py, rz];
+
+  if (dragSnap) {
+    const sp = snapPos(p, dragSnap);
+    const pull = Math.hypot(rx - sp[0], rz - sp[2]);
+    if (pull > RELEASE_DIST) dragSnap = null;
+  }
+
+  let newPos;
+  if (!dragSnap) {
+    movePrimitive(model, dragId, [rx, py, rz]);
+    const { snapped } = detectProximity();
+    const mySnap = snapped.find(c => c.panelA === dragId || c.panelB === dragId);
+    if (mySnap) {
+      const isA = mySnap.panelA === dragId;
+      dragSnap = { otherId: isA ? mySnap.panelB : mySnap.panelA, myEdge: isA ? mySnap.edgeA : mySnap.edgeB, otherEdge: isA ? mySnap.edgeB : mySnap.edgeA };
+    }
+    newPos = [rx, py, rz];
+  } else {
+    newPos = snapPos(p, dragSnap);
+  }
+  movePrimitive(model, dragId, newPos);
+  rebuildFromModel();
+  updateConnections();
+});
+
+canvas.addEventListener('mouseup',()=>{
+  if(!isDragging) return;
+  isDragging=false; orbit.enabled=true;
+  canvas.classList.remove('drag');
+  document.getElementById('snapbadge').classList.remove('on');
+  dragId=null; dragSnap=null;
+  updateConnections(true);
+});
+
+canvas.addEventListener('mouseleave',()=>{
+  if(isDragging){isDragging=false;orbit.enabled=true;canvas.classList.remove('drag');dragId=null;dragSnap=null;}
+});
+
+// ─────────────────────────────────────────────
+//  Keyboard
+// ─────────────────────────────────────────────
+document.addEventListener('keydown',e=>{
+  if(document.activeElement.tagName==='INPUT') return;
+  if(e.key==='Delete'||e.key==='Backspace') { e.preventDefault(); delSelected(); }
+  if(e.key==='Escape'){deselect();}
+  if(e.key==='1') setRotPreset(0);
+  if(e.key==='2') setRotPreset(1);
+  if(e.key==='3') setRotPreset(2);
+});
+
+// ─────────────────────────────────────────────
+//  UI actions
+// ─────────────────────────────────────────────
+function deselect() {
+  selectedId = null;
+  selectedPanelId = null;
+  rebuildFromModel();
+  updateRightPanel();
+}
+
+function addPreset(type) {
+  const map = { plank: { w: 160, h: 80, t: 6 }, square: { w: 100, h: 100, t: 6 }, tall: { w: 80, h: 140, t: 6 }, wide: { w: 200, h: 60, t: 6 } };
+  const cfg = map[type] || map.plank;
+  const p = addPanel(cfg);
+  selectedId = p.id;
+  rebuildFromModel();
+  selectedPanelId = getFirstRenderedPanelId(p.id);
+  rebuildFromModel();
+  updateConnList();
+  updateRightPanel();
+  updateJson();
+}
+window.addPreset = addPreset;
+
+function insertMacroTemplate(templateId) {
+  const primitive = addMacroTemplate(templateId);
+  if (!primitive) return;
+  selectedId = primitive.id;
+  rebuildFromModel();
+  selectedPanelId = getFirstRenderedPanelId(primitive.id);
+  rebuildFromModel();
+  updateConnList();
+  updateRightPanel();
+  updateJson();
+}
+window.insertMacroTemplate = insertMacroTemplate;
+
+function loadScene(name) {
+  clearAll();
+  const scenes = {
+    lshape: [
+      { id: 'p1', w: 120, h: 100, t: 6, pos: [0, 0, 0], rot: [...ROT_PRESETS[0]], color: 0x6366f1, label: '竖板A' },
+      { id: 'p2', w: 120, h: 100, t: 6, pos: [120, 0, 0], rot: [...ROT_PRESETS[1]], color: 0x10b981, label: '侧板B' },
+    ],
+    box3: [
+      { id: 'p1', w: 140, h: 100, t: 6, pos: [-50, 0, 0], rot: [...ROT_PRESETS[0]], color: 0x6366f1, label: '前板' },
+      { id: 'p2', w: 140, h: 100, t: 6, pos: [160, 0, 0], rot: [...ROT_PRESETS[0]], color: 0x8b5cf6, label: '后板' },
+      { id: 'p3', w: 100, h: 140, t: 6, pos: [0, 0, -60], rot: [...ROT_PRESETS[2]], color: 0x10b981, label: '底板' },
+    ],
+    shelf: [
+      { id: 'p1', w: 200, h: 120, t: 6, pos: [-30, 0, 0], rot: [...ROT_PRESETS[0]], color: 0xf59e0b, label: '侧板A' },
+      { id: 'p2', w: 200, h: 120, t: 6, pos: [230, 0, 0], rot: [...ROT_PRESETS[0]], color: 0xf59e0b, label: '侧板B' },
+      { id: 'p3', w: 100, h: 200, t: 6, pos: [100, 0, -50], rot: [...ROT_PRESETS[2]], color: 0xfbbf24, label: '搁板' },
+    ],
+    cross: [
+      { id: 'p1', w: 160, h: 100, t: 6, pos: [-30, 0, -80], rot: [...ROT_PRESETS[0]], color: 0xef4444, label: '板A' },
+      { id: 'p2', w: 160, h: 100, t: 6, pos: [-30, 0, 50], rot: [...ROT_PRESETS[0]], color: 0xf87171, label: '板B' },
+      { id: 'p3', w: 160, h: 100, t: 6, pos: [-30, 0, -80], rot: [...ROT_PRESETS[1]], color: 0x06b6d4, label: '板C' },
+      { id: 'p4', w: 160, h: 100, t: 6, pos: [100, 0, -80], rot: [...ROT_PRESETS[1]], color: 0x22d3ee, label: '板D' },
+    ],
+  };
+  const list = scenes[name] || scenes.lshape;
+  for (const cfg of list) {
+    addRectPanel(model, {
+      id: cfg.id,
+      label: cfg.label,
+      width: cfg.w,
+      height: cfg.h,
+      thickness: cfg.t,
+      pose: { position: [...cfg.pos], rotation: [...cfg.rot] },
+      color: cfg.color,
+    });
+  }
+  updateConnections(true);
+  updateJson();
+}
+window.loadScene = loadScene;
+
+function delSelected() {
+  if (!selectedId) return;
+  const id = selectedId;
+  selectedId = null;
+  selectedPanelId = null;
+  removePrimitive(model, id);
+  prevHash = '';
+  rebuildFromModel();
+  updateConnections(true);
+  updateRightPanel();
+  updateJson();
+}
+window.delSelected = delSelected;
+
+function clearAll() {
+  model = createModel({ primitives: [], connections: [], meta: {} });
+  selectedId = null;
+  selectedPanelId = null;
+  prevHash = '';
+  rebuildFromModel();
+  hlGroup.clear();
+  updateConnList();
+  updateRightPanel();
+  updateJson();
+}
+window.clearAll = clearAll;
+
+function setViewMode(mode) {
+  viewMode = mode === 'expanded' ? 'expanded' : 'macro';
+  if (viewMode === 'expanded' && selectedId) {
+    selectedPanelId = getFirstRenderedPanelId(selectedId);
+  }
+  document.getElementById('btn-view-macro')?.classList.toggle('active', viewMode === 'macro');
+  document.getElementById('btn-view-expanded')?.classList.toggle('active', viewMode === 'expanded');
+  rebuildFromModel();
+  updateRightPanel();
+}
+window.setViewMode = setViewMode;
+
+function setRotPreset(idx) {
+  if (!selectedId) return;
+  rotatePrimitive(model, selectedId, [...ROT_PRESETS[idx]]);
+  rebuildFromModel();
+  selectedPanelId = getFirstRenderedPanelId(selectedId);
+  rebuildFromModel();
+  updateConnections(true);
+  updateRightPanel();
+  ['rp0', 'rp1', 'rp2'].forEach((id, i) => document.getElementById(id)?.classList.toggle('active', i === idx));
+}
+window.setRotPreset = setRotPreset;
+
+function upSel(key, val) {
+  if (!selectedId || isNaN(val) || val < 1) return;
+  const p = getPrimitiveById(model, selectedId);
+  if (!p) return;
+  if (key === 'w') { p.shape = p.shape || {}; p.shape.width = val; }
+  else if (key === 'h') { p.shape = p.shape || {}; p.shape.height = val; }
+  else if (key === 't') updatePrimitiveParams(model, selectedId, { thickness: val });
+  rebuildFromModel();
+  updateConnections(true);
+  updateJson();
+}
+window.upSel = upSel;
+
+function upBoxParam(key, val) {
+  if (!selectedId || isNaN(val) || val < 1) return;
+  const primitive = getSelectedPrimitive();
+  if (!primitive || primitive.primitive !== 'box') return;
+  updatePrimitiveParams(model, selectedId, { [key]: val });
+  rebuildFromModel();
+  updateRightPanel();
+  updateJson();
+}
+window.upBoxParam = upBoxParam;
+
+function upBoxJoint(value) {
+  const primitive = getSelectedPrimitive();
+  if (!primitive || primitive.primitive !== 'box') return;
+  primitive.joints = primitive.joints || {};
+  primitive.joints.type = value;
+  rebuildFromModel();
+  updateRightPanel();
+  updateJson();
+}
+window.upBoxJoint = upBoxJoint;
+
+function resetCam(){camera.position.set(180,220,380);orbit.target.set(60,60,0);orbit.update();}
+window.resetCam = resetCam;
+
+function toggleGrid(){
+  gridOn=!gridOn; gridHelper.visible=gridOn;
+  document.getElementById('btn-grid').classList.toggle('active',gridOn);
+}
+window.toggleGrid = toggleGrid;
+
+function toggleXray() {
+  xray = !xray;
+  document.getElementById('btn-xray').classList.toggle('active', xray);
+  rebuildFromModel();
+}
+window.toggleXray = toggleXray;
+
+// ─────────────────────────────────────────────
+//  UI Updates
+// ─────────────────────────────────────────────
+const ENAMES={left:'左',right:'右',top:'上',bottom:'下'};
+
+function updateConnList() {
+  const conns = currentAssembly.connections || [];
+  document.getElementById('ccount').textContent = conns.length;
+  document.getElementById('ccountleft').textContent = conns.length;
+  const list = document.getElementById('clist');
+  list.innerHTML = '';
+  for (const c of conns) {
+    const infoA = getCompiledPanelInfo(c.panelA);
+    const infoB = getCompiledPanelInfo(c.panelB);
+    const d = document.createElement('div');
+    d.className = 'citem';
+    const kind = c.joint?.kind || 'finger';
+    d.innerHTML = `<div class="citem-head"><span class="clabel">指接卡槽</span><span class="jtag">${kind}</span></div>
+<div class="cdetail">${infoA?.label || c.panelA}<span style="color:var(--cyan)">·${ENAMES[c.edgeA] || c.edgeA}</span><br>↕ ${infoB?.label || c.panelB}<span style="color:var(--cyan)">·${ENAMES[c.edgeB] || c.edgeB}</span></div>`;
+    list.appendChild(d);
+  }
+}
+
+function updateRightPanel() {
+  const p = getSelectedPrimitive();
+  const empty = document.getElementById('rempty');
+  const panelFields = document.getElementById('panelFields');
+  const boxFields = document.getElementById('boxFields');
+  const propTitle = document.getElementById('propTitle');
+  empty.style.display = p ? 'none' : '';
+  panelFields.style.display = 'none';
+  boxFields.style.display = 'none';
+  propTitle.textContent = '对象属性';
+  if (!p) return;
+
+  if (p.primitive === 'box') {
+    propTitle.textContent = '盒子宏原语';
+    boxFields.style.display = '';
+    const params = p.params || {};
+    document.getElementById('bl').value = params.length ?? 120;
+    document.getElementById('bw').value = params.width ?? 80;
+    document.getElementById('bh').value = params.height ?? 60;
+    document.getElementById('bt').value = params.thickness ?? 3;
+    document.getElementById('bjoint').value = p.joints?.type || 'finger';
+    const faceInfo = selectedPanelId ? getCompiledPanelInfo(selectedPanelId) : null;
+    const faceLabel = faceInfo && faceInfo.sourcePrimitiveId === p.id && faceInfo.panelKey ? `${faceInfo.label}（${faceInfo.panelKey}）` : '整个盒子';
+    document.getElementById('boxFaceHint').textContent =
+      viewMode === 'expanded'
+        ? `当前是展开视图，已选中：${faceLabel}。参数修改仍回写到同一个 box 宏原语。`
+        : '当前是宏视图，点击任一展开面都会选中整个盒子宏原语。';
+  } else {
+    propTitle.textContent = '面板属性';
+    panelFields.style.display = '';
+    const w = p.shape?.width ?? 80, h = p.shape?.height ?? 60, t = p.thickness ?? 6;
+    document.getElementById('pw').value = w;
+    document.getElementById('ph').value = h;
+    document.getElementById('pt').value = t;
+    const conns = currentAssembly.connections || [];
+    const chips = document.getElementById('echips');
+    chips.innerHTML = '';
+    for (const [ek, el] of Object.entries(ENAMES)) {
+      const on = conns.some(c => (c.panelA === p.id && c.edgeA === ek) || (c.panelB === p.id && c.edgeB === ek));
+      const ch = document.createElement('span');
+      ch.className = 'echip' + (on ? ' on' : '');
+      ch.textContent = el + (on ? ' ⚡' : '');
+      chips.appendChild(ch);
+    }
+  }
+
+  const rot = p.pose?.rotation || [0, 0, 0];
+  const rotIdx = ROT_PRESETS.findIndex(r => r.every((v, i) => Math.abs(v - rot[i]) < 0.01));
+  ['rp0', 'rp1', 'rp2', 'btn-rot0', 'btn-rot1', 'btn-rot2'].forEach((id, index) => {
+    const presetIndex = index % 3;
+    document.getElementById(id)?.classList.toggle('active', presetIndex === rotIdx);
+  });
+}
+
+function syntaxHL(json) {
+  return json.replace(/("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,m=>{
+    if(/^"/.test(m)) return /:$/.test(m)?`<span class="jk">${m}</span>`:`<span class="js">${m}</span>`;
+    if(/true|false/.test(m)) return `<span class="jb">${m}</span>`;
+    return `<span class="jn">${m}</span>`;
+  });
+}
+
+function renderMacroTemplates() {
+  const host = document.getElementById('macroTemplates');
+  if (!host) return;
+  host.innerHTML = '';
+  for (const template of listMacroTemplates().filter(item => item.editorReady)) {
+    const button = document.createElement('button');
+    button.className = 'tpbtn';
+    button.innerHTML = `<span>${template.icon}</span><span>${template.label}</span>`;
+    button.title = template.description;
+    button.addEventListener('click', () => insertMacroTemplate(template.id));
+    host.appendChild(button);
+  }
+}
+
+function updateJson() {
+  document.getElementById('jbody').innerHTML = syntaxHL(JSON.stringify(normalizeModel(model), null, 2));
+}
+
+// ─────────────────────────────────────────────
+//  Resize + render loop
+// ─────────────────────────────────────────────
+function resize(){
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  if(!w||!h) return;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;
+  camera.updateProjectionMatrix();
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  resize();
+  orbit.update();
+  renderer.render(scene,camera);
+}
+animate();
+
+// ─────────────────────────────────────────────
+//  Init: L-shaped starter scene
+// ─────────────────────────────────────────────
+renderMacroTemplates();
+window.loadScene('lshape');
+updateJson();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>正多面体参数化激光切割生成器</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#1a1a2e;color:#e0e0e0;overflow:hidden;height:100vh;width:100vw}
+#viewport{position:absolute;inset:0;width:100%;height:100%}
+#controls{position:absolute;top:16px;right:16px;width:260px;background:rgba(22,22,44,.92);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px;z-index:10}
+#controls h2{font-size:16px;font-weight:600;margin-bottom:4px;color:#fff}
+#controls label{font-size:12px;color:#aaa;display:block}
+#controls select,#controls input[type="range"]{width:100%;margin-top:4px}
+#controls select{background:#2a2a4a;color:#e0e0e0;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:6px 8px;font-size:13px;outline:none}
+#controls input[type="range"]{-webkit-appearance:none;height:4px;background:#444;border-radius:2px;outline:none}
+#controls input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#4fc3f7;cursor:pointer}
+#controls button{background:#4fc3f7;color:#1a1a2e;border:none;border-radius:6px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;transition:background .2s}
+#controls button:hover{background:#81d4fa}
+#controls hr{border:none;border-top:1px solid rgba(255,255,255,.08);margin:4px 0}
+.hint{font-size:11px;color:#666;line-height:1.4}
+.tooltip{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(22,22,44,.9);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 16px;font-size:13px;color:#ccc;pointer-events:none;opacity:0;transition:opacity .2s;z-index:20;white-space:nowrap}
+.tooltip.visible{opacity:1}
+.editor-overlay{position:absolute;inset:0;background:rgba(10,10,20,.88);backdrop-filter:blur(6px);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.editor-overlay.hidden{display:none}
+.editor-header{width:700px;display:flex;justify-content:space-between;align-items:center;padding:12px 0}
+.editor-header span{font-size:16px;font-weight:600}
+.editor-header button{background:rgba(255,255,255,.1);color:#e0e0e0;border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer}
+.editor-header button:hover{background:rgba(255,255,255,.2)}
+.editor-body{background:#1e1e3a;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+#editorCanvas{width:660px;height:460px;background:#0d0d1a;border-radius:8px;cursor:crosshair}
+.editor-toolbar{display:flex;gap:8px;justify-content:center}
+.editor-toolbar button{width:40px;height:40px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#e0e0e0;font-size:18px;cursor:pointer;transition:background .15s}
+.editor-toolbar button:hover,.editor-toolbar button.active{background:#4fc3f7;color:#1a1a2e}
+.editor-props{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px}
+.editor-props label{display:flex;align-items:center;gap:4px;color:#aaa}
+.editor-props input,.editor-props select{width:64px;padding:4px 6px;background:#2a2a4a;border:1px solid rgba(255,255,255,.1);border-radius:4px;color:#e0e0e0;font-size:12px;outline:none}
+.editor-props select{width:100px}
+.editor-props button{background:#4fc3f7;color:#1a1a2e;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;margin-left:auto}
+.editor-props button:hover{background:#81d4fa}
+</style>
+</head>
+<body>
+
+<canvas id="viewport"></canvas>
+
+<aside id="controls">
+  <h2>正多面体生成器</h2>
+  <label>多面体类型</label>
+  <select id="solidType">
+    <option value="tetrahedron">正四面体 (4面)</option>
+    <option value="cube" selected>正六面体 (6面)</option>
+    <option value="octahedron">正八面体 (8面)</option>
+    <option value="dodecahedron">正十二面体 (12面)</option>
+    <option value="icosahedron">正二十面体 (20面)</option>
+  </select>
+  <label>边长 <span id="edgeLenVal">60</span> mm</label>
+  <input type="range" id="edgeLength" min="20" max="200" value="60" step="1">
+  <label>板厚 <span id="thicknessVal">3</span> mm</label>
+  <input type="range" id="thickness" min="1" max="10" value="3" step="0.5">
+  <label>爆炸图</label>
+  <input type="range" id="explode" min="0" max="1" value="0" step="0.01">
+  <button id="explodeBtn">展开</button>
+  <hr>
+  <p class="hint">双击面板进入面编辑模式</p>
+  <p class="hint">悬停面板显示信息</p>
+</aside>
+
+<div id="tooltip" class="tooltip"></div>
+
+<div id="faceEditorOverlay" class="editor-overlay hidden">
+  <div class="editor-header">
+    <span id="editorTitle">面编辑器</span>
+    <button id="editorClose">✕ 关闭</button>
+  </div>
+  <div class="editor-body">
+    <canvas id="editorCanvas"></canvas>
+    <div class="editor-toolbar">
+      <button data-tool="rect" title="矩形">▭</button>
+      <button data-tool="circle" title="圆形">○</button>
+      <button data-tool="star" title="星形">☆</button>
+      <button data-tool="text" title="文字">T</button>
+      <button data-tool="delete" title="删除选中">✕</button>
+    </div>
+    <div class="editor-props" id="editorProps">
+      <label>模式
+        <select id="decoMode">
+          <option value="cut">切割 (镂空)</option>
+          <option value="engrave">雕刻 (浅凹)</option>
+        </select>
+      </label>
+      <label>X <input type="number" id="decoPosX" step="1"></label>
+      <label>Y <input type="number" id="decoPosY" step="1"></label>
+      <label>大小 <input type="number" id="decoSize" step="1" min="1"></label>
+      <label>旋转° <input type="number" id="decoRotation" step="5"></label>
+      <button id="applyDeco">应用到 3D</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// poly-data — Platonic solid geometry
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PHI = (1 + Math.sqrt(5)) / 2;
+
+const RAW = {
+  tetrahedron: {
+    verts: [[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]],
+    rawEdgeLen: 2 * Math.SQRT2, sidesPerFace: 3,
+  },
+  cube: {
+    verts: [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]],
+    rawEdgeLen: 2, sidesPerFace: 4,
+  },
+  octahedron: {
+    verts: [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]],
+    rawEdgeLen: Math.SQRT2, sidesPerFace: 3,
+  },
+  dodecahedron: {
+    verts: [
+      [1,1,1],[1,1,-1],[1,-1,1],[1,-1,-1],[-1,1,1],[-1,1,-1],[-1,-1,1],[-1,-1,-1],
+      [0,1/PHI,PHI],[0,1/PHI,-PHI],[0,-1/PHI,PHI],[0,-1/PHI,-PHI],
+      [1/PHI,PHI,0],[1/PHI,-PHI,0],[-1/PHI,PHI,0],[-1/PHI,-PHI,0],
+      [PHI,0,1/PHI],[PHI,0,-1/PHI],[-PHI,0,1/PHI],[-PHI,0,-1/PHI],
+    ],
+    rawEdgeLen: 2 / PHI, sidesPerFace: 5,
+  },
+  icosahedron: {
+    verts: [
+      [0,1,PHI],[0,-1,PHI],[0,1,-PHI],[0,-1,-PHI],
+      [1,PHI,0],[-1,PHI,0],[1,-PHI,0],[-1,-PHI,0],
+      [PHI,0,1],[-PHI,0,1],[PHI,0,-1],[-PHI,0,-1],
+    ],
+    rawEdgeLen: 2, sidesPerFace: 3,
+  },
+};
+
+function dist(a,b){return Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2])}
+function cross3(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}
+function dot3(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]}
+function normalize3(v){const l=Math.hypot(...v);return l>0?v.map(c=>c/l):[0,0,0]}
+function sub3(a,b){return[a[0]-b[0],a[1]-b[1],a[2]-b[2]]}
+
+function findEdges(verts,edgeLen){
+  const eps=edgeLen*0.01,edges=[];
+  for(let i=0;i<verts.length;i++)for(let j=i+1;j<verts.length;j++)
+    if(Math.abs(dist(verts[i],verts[j])-edgeLen)<eps)edges.push([i,j]);
+  return edges;
+}
+function buildAdj(verts,edges){
+  const adj=Array.from({length:verts.length},()=>[]);
+  for(const[a,b]of edges){adj[a].push(b);adj[b].push(a)}return adj;
+}
+function findTriFaces(verts,adj){
+  const s=new Set(),faces=[],n=verts.length;
+  for(let i=0;i<n;i++)for(const j of adj[i]){if(j<=i)continue;
+    for(const k of adj[j]){if(k<=j)continue;if(adj[i].includes(k)){
+      const key=[i,j,k].join(',');if(!s.has(key)){s.add(key);faces.push([i,j,k])}}}}
+  return faces;
+}
+function findQuadFaces(){return[[0,3,2,1],[4,5,6,7],[0,4,7,3],[1,2,6,5],[0,1,5,4],[3,7,6,2]]}
+function findPentFaces(verts,adj){
+  const s=new Set(),faces=[];
+  for(let a=0;a<verts.length;a++)for(const b of adj[a])for(const c of adj[b]){
+    if(c===a)continue;for(const d of adj[c]){if(d===a||d===b)continue;
+      for(const e of adj[d]){if(e===a||e===b||e===c)continue;if(adj[e].includes(a)){
+        const sorted=[a,b,c,d,e].sort((x,y)=>x-y),key=sorted.join(',');
+        if(!s.has(key)){s.add(key);faces.push([a,b,c,d,e])}}}}}
+  return faces;
+}
+function orientFace(verts,face){
+  const v0=verts[face[0]],v1=verts[face[1]],v2=verts[face[2]];
+  const normal=cross3(sub3(v1,v0),sub3(v2,v0));
+  const center=faceCenter(verts,face);
+  return dot3(normal,center)<0?[...face].reverse():[...face];
+}
+function faceCenter(verts,face){
+  const s=[0,0,0];for(const i of face){s[0]+=verts[i][0];s[1]+=verts[i][1];s[2]+=verts[i][2]}
+  return s.map(c=>c/face.length);
+}
+function edgeKey(a,b){return a<b?`${a}-${b}`:`${b}-${a}`}
+function buildEdgeFaceAdj(faces){
+  const map={};
+  for(let fi=0;fi<faces.length;fi++){const f=faces[fi],n=f.length;
+    for(let i=0;i<n;i++){const key=edgeKey(f[i],f[(i+1)%n]);if(!map[key])map[key]=[];map[key].push(fi)}}
+  return map;
+}
+function computeEdgeTypes(faces,edgeFaceAdj){
+  return faces.map((face,fi)=>{const n=face.length,types=[];
+    for(let i=0;i<n;i++){const key=edgeKey(face[i],face[(i+1)%n]);
+      const[f1,f2]=edgeFaceAdj[key];types.push(fi===Math.min(f1,f2)?'A':'B')}return types});
+}
+function computeFaceBasis(verts,face){
+  const center=faceCenter(verts,face),v0=verts[face[0]],v1=verts[face[1]];
+  const normal=normalize3(cross3(sub3(v1,v0),sub3(verts[face[2]],v0)));
+  const localX=normalize3(sub3(v0,center));
+  const localY=normalize3(cross3(normal,localX));
+  return{center,normal,localX,localY};
+}
+function projectFaceTo2D(verts,face,basis){
+  return face.map(i=>{const d=sub3(verts[i],basis.center);return[dot3(d,basis.localX),dot3(d,basis.localY)]});
+}
+function buildSolid(name){
+  const raw=RAW[name],sc=1/raw.rawEdgeLen;
+  const verts=raw.verts.map(v=>v.map(c=>c*sc));
+  const edges=findEdges(verts,1.0),adj=buildAdj(verts,edges);
+  let rawFaces;
+  if(raw.sidesPerFace===3)rawFaces=findTriFaces(verts,adj);
+  else if(raw.sidesPerFace===4)rawFaces=findQuadFaces();
+  else rawFaces=findPentFaces(verts,adj);
+  const faces=rawFaces.map(f=>orientFace(verts,f));
+  const edgeFaceAdj=buildEdgeFaceAdj(faces);
+  const edgeTypes=computeEdgeTypes(faces,edgeFaceAdj);
+  const faceBases=faces.map(f=>computeFaceBasis(verts,f));
+  const faces2D=faces.map((f,i)=>projectFaceTo2D(verts,f,faceBases[i]));
+  return{name,sidesPerFace:raw.sidesPerFace,vertices:verts,faces,edges,edgeTypes,faceBases,faces2D,edgeFaceAdj};
+}
+
+const SOLIDS={};
+for(const name of Object.keys(RAW))SOLIDS[name]=buildSolid(name);
+
+function getScaledSolid(name,edgeLength){
+  const solid=SOLIDS[name],s=edgeLength;
+  const verts=solid.vertices.map(v=>v.map(c=>c*s));
+  const faceBases=solid.faces.map(f=>computeFaceBasis(verts,f));
+  const faces2D=solid.faces.map((f,i)=>projectFaceTo2D(verts,f,faceBases[i]));
+  return{...solid,vertices:verts,faceBases,faces2D};
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// polygon-joint-utils — finger-jointed polygon shapes
+// ═══════════════════════════════════════════════════════════════════════════
+
+function calcToothCount(edgeLen,thickness){
+  let n=Math.max(3,Math.floor(edgeLen/(3*thickness)));
+  if(n%2===0)n+=1;return n;
+}
+function fingerEdgePts(x0,y0,x1,y1,outX,outY,t,type){
+  if(type==='flat')return[[x0,y0]];
+  const len=Math.hypot(x1-x0,y1-y0);if(len<1e-6)return[[x0,y0]];
+  const n=calcToothCount(len,t),segW=len/n,dx=(x1-x0)/len,dy=(y1-y0)/len,pts=[];
+  for(let i=0;i<n;i++){
+    const sx=x0+dx*i*segW,sy=y0+dy*i*segW,ex=x0+dx*(i+1)*segW,ey=y0+dy*(i+1)*segW;
+    const hasTab=type==='A'?(i%2===0):(i%2!==0);
+    if(hasTab){pts.push([sx,sy],[sx+outX*t,sy+outY*t],[ex+outX*t,ey+outY*t],[ex,ey])}
+    else{pts.push([sx,sy])}
+  }return pts;
+}
+function dedup(rawPts){
+  const pts=[rawPts[0]];
+  for(let i=1;i<rawPts.length;i++){const prev=pts[pts.length-1];
+    if(Math.abs(rawPts[i][0]-prev[0])>1e-4||Math.abs(rawPts[i][1]-prev[1])>1e-4)pts.push(rawPts[i])}
+  return pts;
+}
+function polygonJointShape(verts2D,thickness,edgeTypes,holes){
+  const allPts=[],n=verts2D.length;
+  for(let i=0;i<n;i++){
+    const[x0,y0]=verts2D[i],[x1,y1]=verts2D[(i+1)%n];
+    const edgeDx=x1-x0,edgeDy=y1-y0,len=Math.hypot(edgeDx,edgeDy);
+    const outX=edgeDy/len,outY=-edgeDx/len;
+    allPts.push(...fingerEdgePts(x0,y0,x1,y1,outX,outY,thickness,edgeTypes[i]));
+  }
+  const pts=dedup(allPts),shape=new THREE.Shape();
+  shape.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++)shape.lineTo(pts[i][0],pts[i][1]);
+  shape.closePath();
+  if(holes)for(const h of holes)shape.holes.push(h);
+  return shape;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// face-decorations — cut holes / engrave meshes
+// ═══════════════════════════════════════════════════════════════════════════
+
+function rotatePoint(x,y,angle){const c=Math.cos(angle),s=Math.sin(angle);return[x*c-y*s,x*s+y*c]}
+
+function applyDecorations(decorations,mode){
+  if(!decorations||decorations.length===0)return null;
+  const cutItems=decorations.filter(d=>d.mode==='cut');
+  const engraveItems=decorations.filter(d=>d.mode==='engrave');
+  if(mode==='cut'){if(cutItems.length===0)return null;return cutItems.map(d=>decorationToPath(d))}
+  if(mode==='engrave'){if(engraveItems.length===0)return null;return engraveItems.map(d=>decorationToEngraveMesh(d))}
+  return null;
+}
+function decorationToPath(deco){
+  const path=new THREE.Path();
+  switch(deco.type){
+    case'circle':{const{cx,cy,radius}=deco;path.absarc(cx,cy,radius,0,Math.PI*2,false);break}
+    case'rect':{const{x,y,width,height,rotation:r=0}=deco;const hw=width/2,hh=height/2;
+      let corners=[[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]];
+      if(r!==0)corners=corners.map(c=>rotatePoint(c[0],c[1],r));
+      corners=corners.map(c=>[c[0]+x,c[1]+y]);path.moveTo(corners[0][0],corners[0][1]);
+      for(let i=1;i<corners.length;i++)path.lineTo(corners[i][0],corners[i][1]);path.closePath();break}
+    case'star':{const{cx,cy,outerR,innerR,points:p=5,rotation:r=0}=deco;const step=Math.PI/p;
+      path.moveTo(cx+outerR*Math.cos(r-Math.PI/2),cy+outerR*Math.sin(r-Math.PI/2));
+      for(let i=1;i<p*2;i++){const rd=i%2===0?outerR:innerR;const angle=r-Math.PI/2+i*step;
+        path.lineTo(cx+rd*Math.cos(angle),cy+rd*Math.sin(angle))}path.closePath();break}
+    case'text':{const{x,y,content,fontSize:fs=10,rotation:r=0}=deco;const cw=fs*0.6,tw=content.length*cw,hw=tw/2,hh=fs/2;
+      let corners=[[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]];
+      if(r!==0)corners=corners.map(c=>rotatePoint(c[0],c[1],r));
+      corners=corners.map(c=>[c[0]+x,c[1]+y]);path.moveTo(corners[0][0],corners[0][1]);
+      for(let i=1;i<corners.length;i++)path.lineTo(corners[i][0],corners[i][1]);path.closePath();break}
+  }return path;
+}
+function decorationToEngraveMesh(deco){
+  const shape=new THREE.Shape(),depth=0.5;
+  switch(deco.type){
+    case'circle':{const{cx,cy,radius}=deco;shape.absarc(cx,cy,radius,0,Math.PI*2,false);break}
+    case'rect':{const{x,y,width,height}=deco;const hw=width/2,hh=height/2;
+      shape.moveTo(x-hw,y-hh);shape.lineTo(x+hw,y-hh);shape.lineTo(x+hw,y+hh);shape.lineTo(x-hw,y+hh);shape.closePath();break}
+    case'star':{const{cx,cy,outerR,innerR,points:p=5,rotation:r=0}=deco;const step=Math.PI/p;
+      shape.moveTo(cx+outerR*Math.cos(r-Math.PI/2),cy+outerR*Math.sin(r-Math.PI/2));
+      for(let i=1;i<p*2;i++){const rd=i%2===0?outerR:innerR;const angle=r-Math.PI/2+i*step;
+        shape.lineTo(cx+rd*Math.cos(angle),cy+rd*Math.sin(angle))}shape.closePath();break}
+    case'text':{const{x,y,content,fontSize:fs=10}=deco;const cw=fs*0.6,tw=content.length*cw,hw=tw/2,hh=fs/2;
+      shape.moveTo(x-hw,y-hh);shape.lineTo(x+hw,y-hh);shape.lineTo(x+hw,y+hh);shape.lineTo(x-hw,y+hh);shape.closePath();break}
+  }
+  const geo=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:false});
+  const mat=new THREE.MeshStandardMaterial({color:0x333333,roughness:0.8,metalness:0.05,transparent:true,opacity:0.85});
+  const mesh=new THREE.Mesh(geo,mat);mesh.position.z=-depth*0.5;return mesh;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// poly-generator — 3D panel assembly
+// ═══════════════════════════════════════════════════════════════════════════
+
+const FACE_COLORS=[0x4fc3f7,0x81c784,0xffb74d,0xe57373,0xba68c8,0x4dd0e1,0xaed581,0xfff176,0xf06292,0x7986cb,0xa1887f,0x90a4ae];
+
+function generatePolyhedron(params){
+  const{solidType,edgeLength,thickness,faceDecorations}=params;
+  const solid=getScaledSolid(solidType,edgeLength);
+  const group=new THREE.Group();
+  for(let fi=0;fi<solid.faces.length;fi++){
+    const verts2D=solid.faces2D[fi],eTypes=solid.edgeTypes[fi],basis=solid.faceBases[fi];
+    let holes=null;
+    if(faceDecorations&&faceDecorations[fi])holes=applyDecorations(faceDecorations[fi],'cut');
+    const shape=polygonJointShape(verts2D,thickness,eTypes,holes);
+    const geo=new THREE.ExtrudeGeometry(shape,{depth:thickness,bevelEnabled:false});
+    const color=FACE_COLORS[fi%FACE_COLORS.length];
+    const mat=new THREE.MeshStandardMaterial({color,roughness:0.5,metalness:0.15,side:THREE.DoubleSide});
+    const mesh=new THREE.Mesh(geo,mat);
+    const lx=new THREE.Vector3(...basis.localX),ly=new THREE.Vector3(...basis.localY),nm=new THREE.Vector3(...basis.normal);
+    const rotM=new THREE.Matrix4();rotM.makeBasis(lx,ly,nm);mesh.applyMatrix4(rotM);
+    mesh.position.set(...basis.center);
+    mesh.userData={faceIndex:fi,solidType,normal:[...basis.normal],center:[...basis.center],basePosition:null,verts2D,edgeTypes:eTypes};
+    if(faceDecorations&&faceDecorations[fi]){const ems=applyDecorations(faceDecorations[fi],'engrave');if(ems)for(const em of ems)mesh.add(em)}
+    group.add(mesh);
+  }
+  group.traverse(child=>{if(child.isMesh&&child.userData.faceIndex!==undefined)child.userData.basePosition=child.position.clone()});
+  return group;
+}
+function updateExplode(group,factor,maxDist=50){
+  group.traverse(child=>{if(!child.isMesh||!child.userData.basePosition)return;
+    const base=child.userData.basePosition,n=child.userData.normal;if(!n)return;
+    child.position.set(base.x+n[0]*factor*maxDist,base.y+n[1]*factor*maxDist,base.z+n[2]*factor*maxDist)});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Scene setup
+// ═══════════════════════════════════════════════════════════════════════════
+
+const canvas=document.getElementById('viewport');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setClearColor(0x1a1a2e);
+
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,0.1,2000);
+camera.position.set(100,80,120);
+const controls=new OrbitControls(camera,canvas);
+controls.enableDamping=true;controls.dampingFactor=0.08;
+
+scene.add(new THREE.AmbientLight(0xffffff,0.5));
+const dl1=new THREE.DirectionalLight(0xffffff,0.8);dl1.position.set(60,100,80);scene.add(dl1);
+const dl2=new THREE.DirectionalLight(0xffffff,0.3);dl2.position.set(-40,-20,-60);scene.add(dl2);
+scene.add(new THREE.GridHelper(400,40,0x333355,0x222244));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// App state
+// ═══════════════════════════════════════════════════════════════════════════
+
+let currentGroup=null;
+let currentParams={solidType:'cube',edgeLength:60,thickness:3,faceDecorations:{}};
+let explodeFactor=0;
+
+function rebuild(){
+  if(currentGroup){scene.remove(currentGroup);
+    currentGroup.traverse(c=>{if(c.geometry)c.geometry.dispose();
+      if(c.material){if(Array.isArray(c.material))c.material.forEach(m=>m.dispose());else c.material.dispose()}})}
+  currentGroup=generatePolyhedron(currentParams);scene.add(currentGroup);setExplode(explodeFactor);
+}
+function setExplode(f){explodeFactor=f;if(currentGroup)updateExplode(currentGroup,f)}
+function setParam(key,value){currentParams[key]=value;rebuild()}
+function setFaceDecoration(fi,decos){if(!currentParams.faceDecorations)currentParams.faceDecorations={};currentParams.faceDecorations[fi]=decos;rebuild()}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Raycasting
+// ═══════════════════════════════════════════════════════════════════════════
+
+const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2();
+const tooltip=document.getElementById('tooltip');
+let hoveredMesh=null,originalColor=null;
+
+function onMouseMove(e){
+  mouse.x=(e.clientX/window.innerWidth)*2-1;mouse.y=-(e.clientY/window.innerHeight)*2+1;
+  if(!currentGroup)return;raycaster.setFromCamera(mouse,camera);
+  const meshes=[];currentGroup.traverse(c=>{if(c.isMesh&&c.userData.faceIndex!==undefined)meshes.push(c)});
+  const hits=raycaster.intersectObjects(meshes);
+  if(hits.length>0){const mesh=hits[0].object;
+    if(mesh!==hoveredMesh){resetHover();hoveredMesh=mesh;originalColor=mesh.material.color.getHex();
+      mesh.material.color.setHex(0xffffff);mesh.material.emissive.setHex(0x222244)}
+    tooltip.textContent=`面 ${mesh.userData.faceIndex} | ${currentParams.solidType}`;tooltip.classList.add('visible');
+  }else{resetHover();tooltip.classList.remove('visible')}
+}
+function resetHover(){if(hoveredMesh&&originalColor!==null){hoveredMesh.material.color.setHex(originalColor);
+  hoveredMesh.material.emissive.setHex(0);hoveredMesh=null;originalColor=null}}
+function onDblClick(e){
+  if(!currentGroup)return;mouse.x=(e.clientX/window.innerWidth)*2-1;mouse.y=-(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,camera);const meshes=[];
+  currentGroup.traverse(c=>{if(c.isMesh&&c.userData.faceIndex!==undefined)meshes.push(c)});
+  const hits=raycaster.intersectObjects(meshes);
+  if(hits.length>0){const mesh=hits[0].object,fi=mesh.userData.faceIndex;
+    const decos=(currentParams.faceDecorations&&currentParams.faceDecorations[fi])||[];
+    openFaceEditor(fi,mesh.userData.verts2D,decos,currentParams.solidType)}
+}
+canvas.addEventListener('mousemove',onMouseMove);canvas.addEventListener('dblclick',onDblClick);
+
+window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight)});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI controls
+// ═══════════════════════════════════════════════════════════════════════════
+
+(function initUI(){
+  const solidTypeEl=document.getElementById('solidType'),edgeLengthEl=document.getElementById('edgeLength');
+  const thicknessEl=document.getElementById('thickness'),explodeEl=document.getElementById('explode');
+  const explodeBtn=document.getElementById('explodeBtn');
+  const edgeLenVal=document.getElementById('edgeLenVal'),thicknessVal=document.getElementById('thicknessVal');
+
+  solidTypeEl.addEventListener('change',()=>setParam('solidType',solidTypeEl.value));
+  edgeLengthEl.addEventListener('input',()=>{edgeLenVal.textContent=edgeLengthEl.value;setParam('edgeLength',Number(edgeLengthEl.value))});
+  thicknessEl.addEventListener('input',()=>{thicknessVal.textContent=thicknessEl.value;setParam('thickness',Number(thicknessEl.value))});
+  explodeEl.addEventListener('input',()=>setExplode(Number(explodeEl.value)));
+
+  let exploded=false,animId=null;
+  explodeBtn.addEventListener('click',()=>{
+    exploded=!exploded;explodeBtn.textContent=exploded?'合拢':'展开';
+    const target=exploded?1:0,start=Number(explodeEl.value),startTime=performance.now(),duration=600;
+    if(animId)cancelAnimationFrame(animId);
+    function step(now){const t=Math.min((now-startTime)/duration,1);
+      const eased=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;const val=start+(target-start)*eased;
+      explodeEl.value=val;setExplode(val);if(t<1)animId=requestAnimationFrame(step)}
+    animId=requestAnimationFrame(step);
+  });
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Face editor
+// ═══════════════════════════════════════════════════════════════════════════
+
+let feOverlay,feCanvas,feCtx;
+let feFaceIndex=-1,feVerts2D=[],feDecos=[],feSelected=-1,feActiveTool=null,feSolidType='';
+let feScale=1,feOffX=0,feOffY=0;
+let feDragging=false,feDragSX=0,feDragSY=0,feDragOX=0,feDragOY=0;
+
+(function initFaceEditor(){
+  feOverlay=document.getElementById('faceEditorOverlay');
+  feCanvas=document.getElementById('editorCanvas');
+  feCtx=feCanvas.getContext('2d');
+  document.getElementById('editorClose').addEventListener('click',closeFaceEditor);
+  const toolBtns=document.querySelectorAll('.editor-toolbar button');
+  toolBtns.forEach(btn=>btn.addEventListener('click',()=>{
+    const tool=btn.dataset.tool;if(tool==='delete'){feDeleteSelected();return}
+    feActiveTool=feActiveTool===tool?null:tool;
+    toolBtns.forEach(b=>b.classList.toggle('active',b.dataset.tool===feActiveTool))}));
+  feCanvas.addEventListener('mousedown',feOnDown);feCanvas.addEventListener('mousemove',feOnMove);feCanvas.addEventListener('mouseup',()=>{feDragging=false});
+  document.getElementById('applyDeco').addEventListener('click',feApply);
+  ['decoPosX','decoPosY','decoSize','decoRotation','decoMode'].forEach(id=>
+    document.getElementById(id).addEventListener('change',()=>{if(feSelected<0)return;feSyncProps();feDraw()}));
+})();
+
+function openFaceEditor(fi,verts2D,existingDecos,solidTypeName){
+  feFaceIndex=fi;feVerts2D=verts2D;feDecos=existingDecos?JSON.parse(JSON.stringify(existingDecos)):[];
+  feSelected=-1;feSolidType=solidTypeName;
+  document.getElementById('editorTitle').textContent=`面编辑器 — ${solidTypeName} 面 #${fi}`;
+  feOverlay.classList.remove('hidden');
+  const dpr=window.devicePixelRatio||1,rect=feCanvas.getBoundingClientRect();
+  feCanvas.width=rect.width*dpr;feCanvas.height=rect.height*dpr;feCtx.setTransform(dpr,0,0,dpr,0,0);
+  feComputeTransform(rect.width,rect.height);feDraw();
+}
+function closeFaceEditor(){feOverlay.classList.add('hidden');feFaceIndex=-1}
+function feComputeTransform(cw,ch){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const[x,y]of feVerts2D){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y)}
+  const pad=60,pw=maxX-minX,ph=maxY-minY;
+  feScale=Math.min((cw-pad*2)/pw,(ch-pad*2)/ph);
+  feOffX=cw/2-((minX+maxX)/2)*feScale;feOffY=ch/2+((minY+maxY)/2)*feScale;
+}
+function feToCanvas(x,y){return[x*feScale+feOffX,-y*feScale+feOffY]}
+function feToModel(cx,cy){return[(cx-feOffX)/feScale,-(cy-feOffY)/feScale]}
+
+function feDraw(){
+  const w=feCanvas.getBoundingClientRect().width,h=feCanvas.getBoundingClientRect().height;
+  feCtx.clearRect(0,0,w,h);
+  feCtx.beginPath();const[sx,sy]=feToCanvas(feVerts2D[0][0],feVerts2D[0][1]);feCtx.moveTo(sx,sy);
+  for(let i=1;i<feVerts2D.length;i++){const[x,y]=feToCanvas(feVerts2D[i][0],feVerts2D[i][1]);feCtx.lineTo(x,y)}
+  feCtx.closePath();feCtx.strokeStyle='rgba(79,195,247,0.6)';feCtx.lineWidth=2;feCtx.stroke();
+  feCtx.fillStyle='rgba(79,195,247,0.05)';feCtx.fill();
+  feDecos.forEach((d,i)=>feDrawDeco(d,i===feSelected));feUpdateProps();
+}
+function feDrawDeco(d,sel){
+  feCtx.save();
+  const col=d.mode==='cut'?'rgba(229,115,115,0.8)':'rgba(129,199,132,0.8)';
+  const fill=d.mode==='cut'?'rgba(229,115,115,0.2)':'rgba(129,199,132,0.2)';
+  switch(d.type){
+    case'circle':{const[cx,cy]=feToCanvas(d.cx,d.cy),r=d.radius*feScale;
+      feCtx.beginPath();feCtx.arc(cx,cy,r,0,Math.PI*2);feCtx.strokeStyle=col;feCtx.lineWidth=sel?2.5:1.5;
+      feCtx.stroke();feCtx.fillStyle=fill;feCtx.fill();if(sel)feDrawSel(cx-r,cy-r,r*2,r*2);break}
+    case'rect':{const[cx,cy]=feToCanvas(d.x,d.y),w=d.width*feScale,h=d.height*feScale;
+      feCtx.translate(cx,cy);if(d.rotation)feCtx.rotate(-d.rotation);feCtx.strokeStyle=col;feCtx.lineWidth=sel?2.5:1.5;
+      feCtx.strokeRect(-w/2,-h/2,w,h);feCtx.fillStyle=fill;feCtx.fillRect(-w/2,-h/2,w,h);
+      if(sel)feDrawSel(-w/2,-h/2,w,h);break}
+    case'star':{const[cx,cy]=feToCanvas(d.cx,d.cy),or=d.outerR*feScale,ir=(d.innerR||d.outerR*0.4)*feScale,pts=d.points||5;
+      feCtx.translate(cx,cy);if(d.rotation)feCtx.rotate(-d.rotation);feCtx.beginPath();
+      for(let i=0;i<pts*2;i++){const r=i%2===0?or:ir,angle=-Math.PI/2+(i*Math.PI)/pts;
+        const px=r*Math.cos(angle),py=r*Math.sin(angle);if(i===0)feCtx.moveTo(px,py);else feCtx.lineTo(px,py)}
+      feCtx.closePath();feCtx.strokeStyle=col;feCtx.lineWidth=sel?2.5:1.5;feCtx.stroke();feCtx.fillStyle=fill;feCtx.fill();
+      if(sel)feDrawSel(-or,-or,or*2,or*2);break}
+    case'text':{const[cx,cy]=feToCanvas(d.x,d.y),fs=(d.fontSize||10)*feScale;
+      feCtx.translate(cx,cy);if(d.rotation)feCtx.rotate(-d.rotation);
+      feCtx.font=`${fs}px sans-serif`;feCtx.fillStyle=col;feCtx.textAlign='center';feCtx.textBaseline='middle';
+      feCtx.fillText(d.content||'Text',0,0);const tw=feCtx.measureText(d.content||'Text').width;
+      if(sel)feDrawSel(-tw/2,-fs/2,tw,fs);break}
+  }feCtx.restore();
+}
+function feDrawSel(x,y,w,h){
+  feCtx.strokeStyle='#fff';feCtx.lineWidth=1;feCtx.setLineDash([4,3]);
+  feCtx.strokeRect(x-4,y-4,w+8,h+8);feCtx.setLineDash([]);
+  const hs=6;feCtx.fillStyle='#4fc3f7';
+  for(const[hx,hy]of[[x-4,y-4],[x+w+4,y-4],[x-4,y+h+4],[x+w+4,y+h+4]])
+    feCtx.fillRect(hx-hs/2,hy-hs/2,hs,hs);
+}
+function feOnDown(e){
+  const rect=feCanvas.getBoundingClientRect(),cx=e.clientX-rect.left,cy=e.clientY-rect.top,[mx,my]=feToModel(cx,cy);
+  if(feActiveTool){feAddDeco(feActiveTool,mx,my);feActiveTool=null;
+    document.querySelectorAll('.editor-toolbar button').forEach(b=>b.classList.remove('active'));feDraw();return}
+  feSelected=-1;
+  for(let i=feDecos.length-1;i>=0;i--)if(feHitTest(feDecos[i],mx,my)){feSelected=i;break}
+  if(feSelected>=0){feDragging=true;feDragSX=mx;feDragSY=my;const d=feDecos[feSelected];
+    feDragOX=d.cx!==undefined?d.cx:d.x;feDragOY=d.cy!==undefined?d.cy:d.y}
+  feDraw();
+}
+function feOnMove(e){
+  if(!feDragging||feSelected<0)return;const rect=feCanvas.getBoundingClientRect();
+  const cx=e.clientX-rect.left,cy=e.clientY-rect.top,[mx,my]=feToModel(cx,cy);
+  const dx=mx-feDragSX,dy=my-feDragSY,d=feDecos[feSelected];
+  if(d.cx!==undefined){d.cx=feDragOX+dx;d.cy=feDragOY+dy}else{d.x=feDragOX+dx;d.y=feDragOY+dy}
+  feDraw();
+}
+function feHitTest(d,mx,my){
+  const m=3/feScale;
+  switch(d.type){
+    case'circle':return Math.hypot(mx-d.cx,my-d.cy)<=d.radius+m;
+    case'rect':{const hw=d.width/2+m,hh=d.height/2+m;let lx=mx-d.x,ly=my-d.y;
+      if(d.rotation){const c=Math.cos(-d.rotation),s=Math.sin(-d.rotation);const rx=lx*c-ly*s,ry=lx*s+ly*c;lx=rx;ly=ry}
+      return Math.abs(lx)<=hw&&Math.abs(ly)<=hh}
+    case'star':return Math.hypot(mx-d.cx,my-d.cy)<=d.outerR+m;
+    case'text':{const cw=(d.fontSize||10)*0.6,tw=(d.content||'Text').length*cw;
+      return Math.abs(mx-d.x)<=tw/2+m&&Math.abs(my-d.y)<=(d.fontSize||10)/2+m}
+  }return false;
+}
+function feAddDeco(type,mx,my){
+  const sz=8;let deco;
+  switch(type){
+    case'circle':deco={type:'circle',cx:mx,cy:my,radius:sz,mode:'cut',rotation:0};break;
+    case'rect':deco={type:'rect',x:mx,y:my,width:sz*2,height:sz,mode:'cut',rotation:0};break;
+    case'star':deco={type:'star',cx:mx,cy:my,outerR:sz,innerR:sz*0.4,points:5,mode:'cut',rotation:0};break;
+    case'text':{const text=prompt('输入文字:','Hello');if(!text)return;
+      deco={type:'text',x:mx,y:my,content:text,fontSize:10,mode:'cut',rotation:0};break}
+    default:return;
+  }feDecos.push(deco);feSelected=feDecos.length-1;
+}
+function feDeleteSelected(){if(feSelected<0)return;feDecos.splice(feSelected,1);feSelected=-1;feDraw()}
+function feUpdateProps(){
+  const propsEl=document.getElementById('editorProps');
+  if(feSelected<0){propsEl.style.opacity='0.4';return}propsEl.style.opacity='1';
+  const d=feDecos[feSelected];
+  document.getElementById('decoPosX').value=Math.round(d.cx!==undefined?d.cx:d.x);
+  document.getElementById('decoPosY').value=Math.round(d.cy!==undefined?d.cy:d.y);
+  document.getElementById('decoMode').value=d.mode||'cut';
+  document.getElementById('decoRotation').value=Math.round((d.rotation||0)*180/Math.PI);
+  const sEl=document.getElementById('decoSize');
+  if(d.type==='circle')sEl.value=Math.round(d.radius);
+  else if(d.type==='rect')sEl.value=Math.round(d.width);
+  else if(d.type==='star')sEl.value=Math.round(d.outerR);
+  else if(d.type==='text')sEl.value=Math.round(d.fontSize);
+}
+function feSyncProps(){
+  if(feSelected<0)return;const d=feDecos[feSelected];
+  const x=Number(document.getElementById('decoPosX').value),y=Number(document.getElementById('decoPosY').value);
+  const size=Number(document.getElementById('decoSize').value);
+  const rot=Number(document.getElementById('decoRotation').value)*Math.PI/180;
+  const mode=document.getElementById('decoMode').value;
+  if(d.cx!==undefined){d.cx=x;d.cy=y}else{d.x=x;d.y=y}d.rotation=rot;d.mode=mode;
+  if(d.type==='circle')d.radius=size;
+  else if(d.type==='rect'){d.width=size;d.height=size*0.5}
+  else if(d.type==='star'){d.outerR=size;d.innerR=size*0.4}
+  else if(d.type==='text')d.fontSize=size;
+}
+function feApply(){if(feFaceIndex<0)return;setFaceDecoration(feFaceIndex,JSON.parse(JSON.stringify(feDecos)));closeFaceEditor()}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Boot
+// ═══════════════════════════════════════════════════════════════════════════
+
+rebuild();
+(function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)})();
+</script>
+</body>
+</html>

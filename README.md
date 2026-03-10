@@ -80,10 +80,10 @@ python3 -m http.server 8123
 
 然后打开：
 
-- http://127.0.0.1:8123/editor-creator.html （编辑器）
-- http://127.0.0.1:8123/mvp-box-demo.html （盒子 Demo）
-- http://127.0.0.1:8123/demo-v2.html （AI Demo）
-- http://127.0.0.1:8123/polyhedra-standalone.html （多面体）
+- http://10.50.62.229:8123/editor-creator.html （编辑器）
+- http://10.50.62.229:8123/mvp-box-demo.html （盒子 Demo）
+- http://10.50.62.229:8123/demo-v2.html （AI Demo）
+- http://10.50.62.229:8123/polyhedra-standalone.html （多面体）
 
 ## 现阶段重点
 

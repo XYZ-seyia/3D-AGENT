@@ -97,6 +97,8 @@ const ROT_LABELS = ['竖·前','竖·侧','水平'];
 let model = createModel({ primitives: [], connections: [], meta: {} });
 let selectedId = null;
 let selectedPanelId = null;
+let selectionLevel = 'none'; // 'none' | 'group' | 'panel'
+let selectedGroupPanelIds = [];
 let viewMode = 'macro';
 let currentAssembly = { panels: [], connections: [] };
 const compiledPanelIndex = new Map();
@@ -199,12 +201,152 @@ function duplicatePrimitiveInstance(sourcePrimitive) {
 }
 
 // ─────────────────────────────────────────────
+//  Group detection & Figma-style selection
+// ─────────────────────────────────────────────
+function computeGroups() {
+  const panels = currentAssembly.panels || [];
+  const conns = currentAssembly.connections || [];
+  const parent = {};
+  const find = (x) => parent[x] === x ? x : (parent[x] = find(parent[x]));
+  const union = (a, b) => { parent[find(a)] = find(b); };
+  for (const p of panels) parent[p.id] = p.id;
+  // Panels from the same source primitive belong to the same group
+  const bySource = {};
+  for (const p of panels) {
+    const srcId = getSourcePrimitiveId(p.id);
+    if (!bySource[srcId]) bySource[srcId] = [];
+    bySource[srcId].push(p.id);
+  }
+  for (const ids of Object.values(bySource)) {
+    for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+  }
+  for (const c of conns) {
+    if (parent[c.panelA] !== undefined && parent[c.panelB] !== undefined)
+      union(c.panelA, c.panelB);
+  }
+  const groups = {};
+  for (const p of panels) {
+    const root = find(p.id);
+    if (!groups[root]) groups[root] = [];
+    groups[root].push(p.id);
+  }
+  return Object.values(groups);
+}
+
+function getGroupForPanel(panelId) {
+  const groups = computeGroups();
+  return groups.find(g => g.includes(panelId)) || [panelId];
+}
+
+function selectGroupOrPanel(panelId) {
+  const group = getGroupForPanel(panelId);
+  selectedGroupPanelIds = group;
+  if (group.length <= 1) {
+    selectionLevel = 'panel';
+    selectedPanelId = panelId;
+    selectedId = getSourcePrimitiveId(panelId);
+  } else {
+    selectionLevel = 'group';
+    selectedPanelId = null;
+    selectedId = null;
+  }
+}
+
+function handlePanelDoubleClick(panelId) {
+  const group = getGroupForPanel(panelId);
+  if (group.length <= 1) return;
+  selectionLevel = 'panel';
+  selectedGroupPanelIds = group;
+  selectedPanelId = panelId;
+  selectedId = getSourcePrimitiveId(panelId);
+  rebuildFromModel();
+  updateRightPanel();
+}
+
+function handleEmptyClick() {
+  if (selectionLevel === 'panel' && selectedGroupPanelIds.length > 1) {
+    selectionLevel = 'group';
+    selectedPanelId = null;
+    selectedId = null;
+    rebuildFromModel();
+    updateRightPanel();
+  } else {
+    deselect();
+  }
+}
+window.handleEmptyClick = handleEmptyClick;
+
+function computeGroupParams() {
+  if (selectedGroupPanelIds.length === 0) return null;
+  const seen = new Set();
+  const primitives = [];
+  for (const pid of selectedGroupPanelIds) {
+    const srcId = getSourcePrimitiveId(pid);
+    if (!seen.has(srcId)) {
+      seen.add(srcId);
+      const p = getPrimitiveById(model, srcId);
+      if (p) primitives.push(p);
+    }
+  }
+  const widths = primitives.filter(p => p.shape?.width != null).map(p => p.shape.width);
+  const heights = primitives.filter(p => p.shape?.height != null).map(p => p.shape.height);
+  const thicknesses = primitives.map(p => p.thickness ?? p.params?.thickness).filter(v => v != null);
+  const allSame = arr => arr.length > 0 && arr.every(v => v === arr[0]);
+  const majority = arr => {
+    if (arr.length === 0) return null;
+    const counts = {};
+    for (const v of arr) counts[v] = (counts[v] || 0) + 1;
+    return +Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  };
+  return {
+    width: { value: majority(widths), uniform: allSame(widths), count: widths.length },
+    height: { value: majority(heights), uniform: allSame(heights), count: heights.length },
+    thickness: { value: majority(thicknesses), uniform: allSame(thicknesses), count: thicknesses.length },
+    panelCount: selectedGroupPanelIds.length,
+    primitiveCount: primitives.length,
+  };
+}
+
+// ─────────────────────────────────────────────
+//  Macro explode (decompose macro → independent panels)
+// ─────────────────────────────────────────────
+function explodeMacroPrimitive(macroId, targetCompiledPanelId) {
+  const macroPanels = (currentAssembly.panels || []).filter(
+    p => (p.meta?.sourcePrimitive || p.id) === macroId
+  );
+  if (macroPanels.length === 0) return null;
+
+  const idMap = new Map();
+  for (const cp of macroPanels) {
+    const newId = makeId('panel');
+    idMap.set(cp.id, newId);
+    addRectPanel(model, {
+      id: newId,
+      label: cp.label || cp.id,
+      width: cp.shape?.width ?? 80,
+      height: cp.shape?.height ?? 60,
+      thickness: cp.thickness ?? 3,
+      pose: {
+        position: cp.position ? [...cp.position] : [0, 0, 0],
+        rotation: cp.rotation ? [...cp.rotation] : [0, 0, 0],
+      },
+      color: cp.color ?? 0xaed581,
+      source: 'exploded',
+    });
+  }
+
+  removePrimitive(model, macroId);
+  prevHash = '';
+  return idMap.get(targetCompiledPanelId) || null;
+}
+
+// ─────────────────────────────────────────────
 //  Three.js
 // ─────────────────────────────────────────────
 const canvas = document.getElementById('c3d');
 const renderer = new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
 renderer.setPixelRatio(devicePixelRatio);
-renderer.setClearColor(0x07070f);
+renderer.setClearColor(0x222222);
 renderer.shadowMap.enabled = true;
 
 const scene = new THREE.Scene();
@@ -224,7 +366,7 @@ sun.castShadow=true; scene.add(sun);
 const fill=new THREE.DirectionalLight(0x8090ff,0.35); fill.position.set(-200,-100,-200); scene.add(fill);
 
 // Grid
-let gridHelper = new THREE.GridHelper(700,35,0x1a1a2e,0x14142a);
+let gridHelper = new THREE.GridHelper(700,35,0x888888,0x444444);
 gridHelper.position.y=-1; scene.add(gridHelper); let gridOn=true;
 
 // Floor (receives shadow)
@@ -499,6 +641,23 @@ function rebuildFromModel() {
     });
   }
 
+  // Re-validate group selection after assembly changes
+  if (selectionLevel !== 'none') {
+    selectedGroupPanelIds = selectedGroupPanelIds.filter(id => compiledPanelIndex.has(id));
+    if (selectedGroupPanelIds.length > 0) {
+      const rep = (selectionLevel === 'panel' && selectedPanelId && compiledPanelIndex.has(selectedPanelId))
+        ? selectedPanelId : selectedGroupPanelIds[0];
+      selectedGroupPanelIds = getGroupForPanel(rep);
+      if (selectionLevel === 'group' && selectedGroupPanelIds.length <= 1) {
+        selectionLevel = 'panel';
+        selectedPanelId = selectedGroupPanelIds[0] || null;
+        selectedId = selectedPanelId ? getSourcePrimitiveId(selectedPanelId) : null;
+      }
+    } else {
+      selectionLevel = 'none'; selectedId = null; selectedPanelId = null; selectedGroupPanelIds = [];
+    }
+  }
+
   const group = renderAssembly(currentAssembly);
   group.traverse(c => {
     if (c.isMesh && c.userData.panelId) {
@@ -506,19 +665,38 @@ function rebuildFromModel() {
       const panelId = c.userData.panelId;
       const sourcePrimitiveId = getSourcePrimitiveId(panelId);
       const sourcePrimitive = getPrimitiveById(model, sourcePrimitiveId);
-      const isExpandedSel = panelId === selectedPanelId;
-      const isMacroSel = sourcePrimitiveId === selectedId;
-      const isSel = viewMode === 'expanded' ? isExpandedSel : isMacroSel;
-      const isMacroSource = sourcePrimitive && sourcePrimitive.primitive !== 'panel';
-      const macroColor = sourcePrimitive?.style?.color ?? 0x818cf8;
+      const isInGroup = selectedGroupPanelIds.includes(panelId);
+      const isSelectedPanel = panelId === selectedPanelId;
       const meshColor = c.material?.color?.getHex?.() ?? 0xaed581;
-      const baseColor = xray
-        ? 0x334155
-        : (viewMode === 'macro' && isMacroSource ? macroColor : meshColor);
+      const baseColor = xray ? 0x334155 : meshColor;
+      let isSel = false, isGroupPeer = false;
+      if (selectionLevel === 'group') {
+        isSel = isInGroup;
+      } else if (selectionLevel === 'panel') {
+        isSel = isSelectedPanel;
+        isGroupPeer = isInGroup && !isSelectedPanel;
+      }
       if (c.material && !Array.isArray(c.material)) {
-        c.material.color.setHex(isSel ? 0x818cf8 : baseColor);
         c.material.transparent = true;
-        c.material.opacity = xray ? 0.35 : (isSel ? 0.95 : (viewMode === 'macro' && isMacroSource ? 0.8 : 0.88));
+        if (isSel) {
+          c.material.color.setHex(0xffffff);
+          c.material.emissive = new THREE.Color(0x333333);
+          c.material.opacity = 1.0;
+          const edges = new THREE.EdgesGeometry(c.geometry);
+          const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.8 }));
+          c.add(line);
+        } else if (isGroupPeer) {
+          c.material.color.setHex(baseColor);
+          c.material.emissive = new THREE.Color(0x181818);
+          c.material.opacity = 0.55;
+          const edges = new THREE.EdgesGeometry(c.geometry);
+          const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x666666, depthTest: false, transparent: true, opacity: 0.35 }));
+          c.add(line);
+        } else {
+          c.material.color.setHex(baseColor);
+          c.material.emissive = new THREE.Color(0x000000);
+          c.material.opacity = xray ? 0.35 : 0.88;
+        }
       }
     }
   });
@@ -529,12 +707,24 @@ function rebuildFromModel() {
 //  Highlights
 // ─────────────────────────────────────────────
 function drawEdgeLine(start, end, color, opacity=1) {
-  const pts=[start.clone(),end.clone()];
-  // Offset slightly toward camera
-  const toC=new THREE.Vector3().subVectors(camera.position,start).normalize().multiplyScalar(2);
-  pts[0].add(toC); pts[1].add(toC);
-  const geo=new THREE.BufferGeometry().setFromPoints(pts);
-  hlGroup.add(new THREE.Line(geo,new THREE.LineBasicMaterial({color,transparent:true,opacity})));
+  const distance = start.distanceTo(end);
+  const mid = start.clone().lerp(end, 0.5);
+  // Offset slightly toward camera to prevent z-fighting
+  const toC = new THREE.Vector3().subVectors(camera.position, mid).normalize().multiplyScalar(3);
+  mid.add(toC);
+  
+  // Use a cylinder for a thicker, more visible line
+  const radius = opacity === 1 ? 2.0 : 1.5; // Thicker for snapped (cyan), slightly thinner for nearby (yellow)
+  const geo = new THREE.CylinderGeometry(radius, radius, distance, 8);
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+  const mesh = new THREE.Mesh(geo, mat);
+  
+  // Orient the cylinder along the edge
+  const direction = new THREE.Vector3().subVectors(end, start).normalize();
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+  mesh.position.copy(mid);
+  
+  hlGroup.add(mesh);
 }
 
 function updateHighlights(nearby, snapped) {
@@ -662,16 +852,15 @@ function planePt(e) {
 canvas.addEventListener('mousedown', e => {
   if (e.button !== 0) return;
   const panelId = hitPanel(e);
-  if (!panelId) { deselect(); return; }
-  const primitiveId = getSourcePrimitiveId(panelId);
+  if (!panelId) { handleEmptyClick(); return; }
+  let primitiveId = getSourcePrimitiveId(panelId);
 
   if (e.altKey) {
     const src = getP(primitiveId);
     const np = duplicatePrimitiveInstance(src);
     if (!np) return;
-    selectedId = np.id;
     rebuildFromModel();
-    selectedPanelId = getFirstRenderedPanelId(np.id);
+    selectGroupOrPanel(getFirstRenderedPanelId(np.id));
     rebuildFromModel();
     updateConnList();
     updateRightPanel();
@@ -680,8 +869,31 @@ canvas.addEventListener('mousedown', e => {
   }
 
   e.stopPropagation();
-  selectedId = primitiveId;
-  selectedPanelId = panelId;
+  if (selectionLevel === 'panel' && selectedGroupPanelIds.includes(panelId)) {
+    selectedPanelId = panelId;
+    selectedId = primitiveId;
+  } else {
+    selectGroupOrPanel(panelId);
+  }
+
+  // Explode macro into independent panels when dragging in panel mode
+  const sourcePrim = getP(primitiveId);
+  if (selectionLevel === 'panel' && sourcePrim && sourcePrim.primitive !== 'panel') {
+    const newPanelId = explodeMacroPrimitive(primitiveId, panelId);
+    if (newPanelId) {
+      primitiveId = newPanelId;
+      selectedId = newPanelId;
+      rebuildFromModel();
+      selectedPanelId = getFirstRenderedPanelId(newPanelId);
+      selectGroupOrPanel(selectedPanelId);
+      if (selectedGroupPanelIds.length > 1) {
+        selectionLevel = 'panel';
+        selectedPanelId = getFirstRenderedPanelId(newPanelId);
+        selectedId = newPanelId;
+      }
+    }
+  }
+
   rebuildFromModel();
   updateRightPanel();
   startDrag(primitiveId, e);
@@ -749,13 +961,18 @@ canvas.addEventListener('mouseleave',()=>{
   if(isDragging){isDragging=false;orbit.enabled=true;canvas.classList.remove('drag');dragId=null;dragSnap=null;}
 });
 
+canvas.addEventListener('dblclick', e => {
+  const panelId = hitPanel(e);
+  if (panelId) handlePanelDoubleClick(panelId);
+});
+
 // ─────────────────────────────────────────────
 //  Keyboard
 // ─────────────────────────────────────────────
 document.addEventListener('keydown',e=>{
   if(document.activeElement.tagName==='INPUT') return;
   if(e.key==='Delete'||e.key==='Backspace') { e.preventDefault(); delSelected(); }
-  if(e.key==='Escape'){deselect();}
+  if(e.key==='Escape'){handleEmptyClick();}
   if(e.key==='1') setRotPreset(0);
   if(e.key==='2') setRotPreset(1);
   if(e.key==='3') setRotPreset(2);
@@ -765,8 +982,10 @@ document.addEventListener('keydown',e=>{
 //  UI actions
 // ─────────────────────────────────────────────
 function deselect() {
+  selectionLevel = 'none';
   selectedId = null;
   selectedPanelId = null;
+  selectedGroupPanelIds = [];
   rebuildFromModel();
   updateRightPanel();
 }
@@ -775,9 +994,8 @@ function addPreset(type) {
   const map = { plank: { w: 160, h: 80, t: 6 }, square: { w: 100, h: 100, t: 6 }, tall: { w: 80, h: 140, t: 6 }, wide: { w: 200, h: 60, t: 6 } };
   const cfg = map[type] || map.plank;
   const p = addPanel(cfg);
-  selectedId = p.id;
   rebuildFromModel();
-  selectedPanelId = getFirstRenderedPanelId(p.id);
+  selectGroupOrPanel(getFirstRenderedPanelId(p.id));
   rebuildFromModel();
   updateConnList();
   updateRightPanel();
@@ -788,9 +1006,8 @@ window.addPreset = addPreset;
 function insertMacroTemplate(templateId) {
   const primitive = addMacroTemplate(templateId);
   if (!primitive) return;
-  selectedId = primitive.id;
   rebuildFromModel();
-  selectedPanelId = getFirstRenderedPanelId(primitive.id);
+  selectGroupOrPanel(getFirstRenderedPanelId(primitive.id));
   rebuildFromModel();
   updateConnList();
   updateRightPanel();
@@ -840,11 +1057,18 @@ function loadScene(name) {
 window.loadScene = loadScene;
 
 function delSelected() {
-  if (!selectedId) return;
-  const id = selectedId;
+  if (selectionLevel === 'none') return;
+  if (selectionLevel === 'group') {
+    const srcIds = new Set();
+    for (const pid of selectedGroupPanelIds) srcIds.add(getSourcePrimitiveId(pid));
+    for (const id of srcIds) removePrimitive(model, id);
+  } else if (selectedId) {
+    removePrimitive(model, selectedId);
+  }
+  selectionLevel = 'none';
   selectedId = null;
   selectedPanelId = null;
-  removePrimitive(model, id);
+  selectedGroupPanelIds = [];
   prevHash = '';
   rebuildFromModel();
   updateConnections(true);
@@ -855,8 +1079,10 @@ window.delSelected = delSelected;
 
 function clearAll() {
   model = createModel({ primitives: [], connections: [], meta: {} });
+  selectionLevel = 'none';
   selectedId = null;
   selectedPanelId = null;
+  selectedGroupPanelIds = [];
   prevHash = '';
   rebuildFromModel();
   hlGroup.clear();
@@ -864,17 +1090,29 @@ function clearAll() {
   updateRightPanel();
   updateJson();
 }
+
+// UI Toggles
+window.toggleJsonPanel = function() {
+  const jbody = document.getElementById('jbody');
+  const jsec = document.querySelector('.jsec');
+  const btn = document.getElementById('btn-toggle-json');
+  if (jbody.style.display === 'none') {
+    jbody.style.display = 'block';
+    jsec.style.flex = '1';
+    btn.innerHTML = '▼';
+    btn.title = '折叠 JSON';
+  } else {
+    jbody.style.display = 'none';
+    jsec.style.flex = '0';
+    btn.innerHTML = '▲';
+    btn.title = '展开 JSON';
+  }
+};
+
 window.clearAll = clearAll;
 
 function setViewMode(mode) {
-  viewMode = mode === 'expanded' ? 'expanded' : 'macro';
-  if (viewMode === 'expanded' && selectedId) {
-    selectedPanelId = getFirstRenderedPanelId(selectedId);
-  }
-  document.getElementById('btn-view-macro')?.classList.toggle('active', viewMode === 'macro');
-  document.getElementById('btn-view-expanded')?.classList.toggle('active', viewMode === 'expanded');
-  rebuildFromModel();
-  updateRightPanel();
+  // View mode replaced by selection level (group/panel via click/dblclick)
 }
 window.setViewMode = setViewMode;
 
@@ -995,21 +1233,52 @@ function updateConnList() {
 }
 
 function updateRightPanel() {
-  const p = getSelectedPrimitive();
   const empty = document.getElementById('rempty');
   const panelFields = document.getElementById('panelFields');
   const boxFields = document.getElementById('boxFields');
   const lampshadeFields = document.getElementById('lampshadeFields');
+  const groupFields = document.getElementById('groupFields');
   const propTitle = document.getElementById('propTitle');
-  empty.style.display = p ? 'none' : '';
+  const levelIndicator = document.getElementById('levelIndicator');
+
+  empty.style.display = 'none';
   panelFields.style.display = 'none';
   boxFields.style.display = 'none';
   if (lampshadeFields) lampshadeFields.style.display = 'none';
+  if (groupFields) groupFields.style.display = 'none';
+  if (levelIndicator) levelIndicator.style.display = 'none';
   propTitle.textContent = '对象属性';
-  if (!p) return;
+
+  if (selectionLevel === 'none') {
+    empty.style.display = '';
+    return;
+  }
+
+  if (levelIndicator) {
+    levelIndicator.style.display = '';
+    if (selectionLevel === 'group') {
+      levelIndicator.innerHTML = '<span class="level-crumb active">组件 (' + selectedGroupPanelIds.length + ' 块板)</span>';
+    } else {
+      const info = getCompiledPanelInfo(selectedPanelId);
+      const panelName = info?.label || selectedPanelId || '面板';
+      levelIndicator.innerHTML = '<span class="level-crumb clickable" onclick="handleEmptyClick()">组件</span><span class="level-sep">›</span><span class="level-crumb active">' + panelName + '</span>';
+    }
+  }
+
+  if (selectionLevel === 'group') {
+    propTitle.textContent = '组件属性';
+    if (groupFields) {
+      groupFields.style.display = '';
+      updateGroupParams();
+    }
+    return;
+  }
+
+  const p = getSelectedPrimitive();
+  if (!p) { empty.style.display = ''; return; }
 
   if (p.primitive === 'lampshade') {
-    propTitle.textContent = '灯罩组件';
+    propTitle.textContent = '灯罩';
     if (lampshadeFields) lampshadeFields.style.display = '';
     const params = p.params || {};
     document.getElementById('lsOuter').value = params.outerRadius ?? 80;
@@ -1017,14 +1286,9 @@ function updateRightPanel() {
     document.getElementById('lsHeight').value = params.height ?? 120;
     document.getElementById('lsRibs').value = params.ribCount ?? 8;
     document.getElementById('lsThick').value = params.thickness ?? 3;
-    const faceInfo = selectedPanelId ? getCompiledPanelInfo(selectedPanelId) : null;
-    const faceLabel = faceInfo && faceInfo.sourcePrimitiveId === p.id && faceInfo.panelKey ? `${faceInfo.label}（${faceInfo.panelKey}）` : '整个灯罩';
-    document.getElementById('lampFaceHint').textContent =
-      viewMode === 'expanded'
-        ? `当前是展开视图，已选中：${faceLabel}。参数修改仍回写到同一个灯罩组件。`
-        : '灯罩组件：上下圆环 + 径向肋片。';
+    document.getElementById('lampFaceHint').textContent = '点击空白处返回组件视图。';
   } else if (p.primitive === 'box') {
-    propTitle.textContent = '盒子组件';
+    propTitle.textContent = '盒子';
     boxFields.style.display = '';
     const params = p.params || {};
     document.getElementById('bl').value = params.length ?? 120;
@@ -1032,12 +1296,7 @@ function updateRightPanel() {
     document.getElementById('bh').value = params.height ?? 60;
     document.getElementById('bt').value = params.thickness ?? 3;
     document.getElementById('bjoint').value = p.joints?.type || 'finger';
-    const faceInfo = selectedPanelId ? getCompiledPanelInfo(selectedPanelId) : null;
-    const faceLabel = faceInfo && faceInfo.sourcePrimitiveId === p.id && faceInfo.panelKey ? `${faceInfo.label}（${faceInfo.panelKey}）` : '整个盒子';
-    document.getElementById('boxFaceHint').textContent =
-      viewMode === 'expanded'
-        ? `当前是展开视图，已选中：${faceLabel}。参数修改仍回写到同一个 box 组件。`
-        : '当前是组件视图，点击任一展开面都会选中整个盒子组件。';
+    document.getElementById('boxFaceHint').textContent = '点击空白处返回组件视图。';
   } else {
     propTitle.textContent = '面板属性';
     panelFields.style.display = '';
@@ -1057,20 +1316,97 @@ function updateRightPanel() {
     }
   }
 
-  const rot = p.pose?.rotation || [0, 0, 0];
-  const isMirrored = p.mirrored || false;
-  const baseRot = isMirrored ? [rot[0], rot[1] - Math.PI, rot[2]] : rot;
-  const rotIdx = ROT_PRESETS.findIndex(r => r.every((v, i) => {
-    let d = Math.abs(baseRot[i] - r[i]) % (2 * Math.PI);
-    if (d > Math.PI) d = 2 * Math.PI - d;
-    return d < 0.01;
-  }));
-  ['rp0', 'rp1', 'rp2', 'btn-rot0', 'btn-rot1', 'btn-rot2'].forEach((id, index) => {
-    const presetIndex = index % 3;
-    document.getElementById(id)?.classList.toggle('active', presetIndex === rotIdx);
-  });
-  document.getElementById('mirrorBtn')?.classList.toggle('active', isMirrored);
+  if (p.pose) {
+    const rot = p.pose.rotation || [0, 0, 0];
+    const isMirrored = p.mirrored || false;
+    const baseRot = isMirrored ? [rot[0], rot[1] - Math.PI, rot[2]] : rot;
+    const rotIdx = ROT_PRESETS.findIndex(r => r.every((v, i) => {
+      let d = Math.abs(baseRot[i] - r[i]) % (2 * Math.PI);
+      if (d > Math.PI) d = 2 * Math.PI - d;
+      return d < 0.01;
+    }));
+    ['rp0', 'rp1', 'rp2', 'btn-rot0', 'btn-rot1', 'btn-rot2'].forEach((id, index) => {
+      const presetIndex = index % 3;
+      document.getElementById(id)?.classList.toggle('active', presetIndex === rotIdx);
+    });
+    document.getElementById('mirrorBtn')?.classList.toggle('active', isMirrored);
+  }
 }
+
+function updateGroupParams() {
+  const params = computeGroupParams();
+  if (!params) return;
+  const countEl = document.getElementById('groupPanelCount');
+  if (countEl) countEl.textContent = params.panelCount + ' 块板';
+  const setField = (inputId, tagId, data) => {
+    const input = document.getElementById(inputId);
+    const tag = document.getElementById(tagId);
+    if (input && data.value != null) input.value = data.value;
+    if (tag) tag.style.display = data.uniform ? 'none' : '';
+  };
+  setField('gw', 'gw-override', params.width);
+  setField('gh', 'gh-override', params.height);
+  setField('gt', 'gt-override', params.thickness);
+  const listEl = document.getElementById('groupPanelList');
+  if (listEl) {
+    listEl.innerHTML = '';
+    for (const panelId of selectedGroupPanelIds) {
+      const info = getCompiledPanelInfo(panelId);
+      const div = document.createElement('div');
+      div.className = 'group-panel-item';
+      div.innerHTML = '<span>' + (info?.label || panelId) + '</span><span class="gpi-arrow">›</span>';
+      div.addEventListener('dblclick', () => handlePanelDoubleClick(panelId));
+      listEl.appendChild(div);
+    }
+  }
+}
+
+function upGroupParam(key, val) {
+  if (isNaN(val) || val < 1) return;
+  const seen = new Set();
+  for (const panelId of selectedGroupPanelIds) {
+    const srcId = getSourcePrimitiveId(panelId);
+    if (seen.has(srcId)) continue;
+    seen.add(srcId);
+    const p = getPrimitiveById(model, srcId);
+    if (!p) continue;
+    if (p.primitive === 'panel') {
+      if (key === 'width') { p.shape = p.shape || {}; p.shape.width = val; }
+      else if (key === 'height') { p.shape = p.shape || {}; p.shape.height = val; }
+      else if (key === 'thickness') updatePrimitiveParams(model, srcId, { thickness: val });
+    } else {
+      updatePrimitiveParams(model, srcId, { [key]: val });
+    }
+  }
+  rebuildFromModel();
+  updateConnections(true);
+  updateGroupParams();
+  updateJson();
+}
+window.upGroupParam = upGroupParam;
+
+function resetGroupParam(key) {
+  const params = computeGroupParams();
+  if (!params || !params[key]) return;
+  const seen = new Set();
+  for (const panelId of selectedGroupPanelIds) {
+    const srcId = getSourcePrimitiveId(panelId);
+    if (seen.has(srcId)) continue;
+    seen.add(srcId);
+    const p = getPrimitiveById(model, srcId);
+    if (!p) continue;
+    if (p.primitive === 'panel') {
+      if (key === 'width') { p.shape = p.shape || {}; p.shape.width = params[key].value; }
+      else if (key === 'height') { p.shape = p.shape || {}; p.shape.height = params[key].value; }
+      else if (key === 'thickness') updatePrimitiveParams(model, srcId, { thickness: params[key].value });
+    }
+  }
+  rebuildFromModel();
+  updateConnections(true);
+  updateGroupParams();
+  updateJson();
+}
+window.resetGroupParam = resetGroupParam;
 
 function syntaxHL(json) {
   return json.replace(/("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,m=>{

@@ -2,7 +2,7 @@
 const http = require('http');
 
 const options = {
-  hostname: '127.0.0.1',
+  hostname: '10.50.62.229',
   port: 8123,
   path: '/mvp-box-demo.html',
   method: 'GET'

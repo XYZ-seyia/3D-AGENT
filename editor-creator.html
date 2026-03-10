@@ -16,10 +16,6 @@
     <button class="tbtn" id="btn-rot0" title="竖板·朝前 (1)" onclick="setRotPreset(0)">⬜ 竖板·前</button>
     <button class="tbtn" id="btn-rot1" title="竖板·朝侧 (2)" onclick="setRotPreset(1)">⬛ 竖板·侧</button>
     <button class="tbtn" id="btn-rot2" title="水平板 (3)" onclick="setRotPreset(2)">▬ 水平板</button>
-    <div class="view-switch">
-      <button class="tbtn active" id="btn-view-macro" onclick="setViewMode('macro')">◫ 组件视图</button>
-      <button class="tbtn" id="btn-view-expanded" onclick="setViewMode('expanded')">▦ 展开视图</button>
-    </div>
     <div class="conn-pill"><span class="cpulse"></span><span id="ccount">0</span> 个卡槽</div>
   </div>
   <div class="tbright">
@@ -79,6 +75,7 @@
 
   <aside id="rpanel">
     <div class="rsec" id="rsec-params">
+      <div class="level-indicator" id="levelIndicator" style="display:none"></div>
       <div class="rtitle" id="propTitle">对象属性</div>
       <div class="empty" id="rempty">点击选择一个对象</div>
       <div id="panelFields" style="display:none">
@@ -154,13 +151,46 @@
         </div>
         <div class="subnote" id="lampFaceHint">灯罩组件：上下圆环 + 径向肋片。</div>
       </div>
-    </div>
-    <div class="jsec">
-      <div class="jhead">
-        <span class="jtitle">JSON 模型</span>
-        <span class="jlive">● 实时</span>
+      <div id="groupFields" style="display:none">
+        <div class="group-header">
+          <span class="group-badge" id="groupPanelCount">0 块板</span>
+        </div>
+        <div class="prow">
+          <span class="plabel">整体宽度 (mm)</span>
+          <div class="pinput-wrap">
+            <input class="pinput" id="gw" type="number" min="20" max="500" oninput="upGroupParam('width',+this.value)">
+            <span class="override-tag" id="gw-override" style="display:none" onclick="resetGroupParam('width')" title="点击重置为统一值">已自定义 ↺</span>
+          </div>
+        </div>
+        <div class="prow">
+          <span class="plabel">整体高度 (mm)</span>
+          <div class="pinput-wrap">
+            <input class="pinput" id="gh" type="number" min="20" max="500" oninput="upGroupParam('height',+this.value)">
+            <span class="override-tag" id="gh-override" style="display:none" onclick="resetGroupParam('height')" title="点击重置为统一值">已自定义 ↺</span>
+          </div>
+        </div>
+        <div class="prow">
+          <span class="plabel">板厚 (mm)</span>
+          <div class="pinput-wrap">
+            <input class="pinput" id="gt" type="number" min="2" max="20" oninput="upGroupParam('thickness',+this.value)">
+            <span class="override-tag" id="gt-override" style="display:none" onclick="resetGroupParam('thickness')" title="点击重置为统一值">已自定义 ↺</span>
+          </div>
+        </div>
+        <div class="group-panels-section">
+          <div style="font-size:11px;color:var(--text2);margin-bottom:6px">包含面板 <span style="font-size:10px">(双击进入)</span></div>
+          <div class="group-panel-list" id="groupPanelList"></div>
+        </div>
       </div>
-      <div id="jbody"></div>
+    </div>
+    <div class="jsec" style="flex: 0;">
+      <div class="jhead" style="cursor: pointer;" onclick="toggleJsonPanel()">
+        <div>
+          <span class="jtitle">JSON 模型</span>
+          <span class="jlive" style="margin-left: 6px;">● 实时</span>
+        </div>
+        <button id="btn-toggle-json" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:10px;">▲</button>
+      </div>
+      <div id="jbody" style="display: none;"></div>
     </div>
   </aside>
 </div>
@@ -224,7 +254,7 @@ if (location.protocol === 'file:') {
   window.addEventListener('DOMContentLoaded', () => {
     const note = document.createElement('div');
     note.style.cssText = 'position:fixed;top:12px;left:12px;right:12px;z-index:9999;padding:12px 14px;border-radius:10px;background:rgba(255,190,92,.96);color:#201400;font:12px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.25)';
-    note.innerHTML = '当前是通过 <b>file://</b> 直接打开。这个页面现在依赖 <code>js/core</code> 本地模块，请改用本地静态服务器访问，例如：<code>python3 -m http.server 8123</code>，然后打开 <code>http://127.0.0.1:8123/editor-creator.html</code>。';
+    note.innerHTML = '当前是通过 <b>file://</b> 直接打开。这个页面现在依赖 <code>js/core</code> 本地模块，请改用本地静态服务器访问，例如：<code>python3 -m http.server 8123</code>，然后打开 <code>http://10.50.62.229:8123/editor-creator.html</code>。';
     document.body.appendChild(note);
   });
 }

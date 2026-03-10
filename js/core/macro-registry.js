@@ -32,6 +32,22 @@ const MACRO_TEMPLATE_DEFS = {
     },
     joints: { type: 'finger' },
   },
+  lampshade: {
+    id: 'lampshade',
+    editorReady: true,
+    label: '灯罩',
+    description: '板片插接灯罩：上下圆环 + 径向肋片。',
+    icon: '💡',
+    primitive: 'lampshade',
+    style: { color: null },
+    params: {
+      outerRadius: 80,
+      innerRadius: 25,
+      height: 120,
+      ribCount: 12,
+      thickness: 3,
+    },
+  },
 };
 
 export function listMacroTemplates() {

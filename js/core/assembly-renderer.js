@@ -100,6 +100,12 @@ function buildHolePaths(holes) {
       path.lineTo(d.x + hw, d.y + hh);
       path.lineTo(d.x - hw, d.y + hh);
       path.closePath();
+    } else if (d.type === 'polygon' && d.verts && d.verts.length >= 3) {
+      path.moveTo(d.verts[0][0], d.verts[0][1]);
+      for (let i = 1; i < d.verts.length; i++) {
+        path.lineTo(d.verts[i][0], d.verts[i][1]);
+      }
+      path.closePath();
     }
     return path;
   });

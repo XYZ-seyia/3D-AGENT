@@ -29,6 +29,10 @@ export function compileModelToAssembly(model) {
       const compiled = compilePolyhedronMacro(prim, model);
       assembly.panels.push(...compiled.panels);
       assembly.connections.push(...compiled.connections);
+    } else if (prim.primitive === 'lampshade') {
+      const compiled = compileLampshadeMacro(prim, model);
+      assembly.panels.push(...compiled.panels);
+      assembly.connections.push(...compiled.connections);
     } else if (prim.primitive === 'panel') {
       assembly.panels.push(compilePanelPrimitive(prim, model));
     }
@@ -133,6 +137,144 @@ export function compilePolyhedronMacro(prim, model) {
   }
 
   return { panels, connections };
+}
+
+export function compileLampshadeMacro(prim, model) {
+  const params = prim.params || {};
+  const outerRadius = params.outerRadius ?? 80;
+  const innerRadius = params.innerRadius ?? 25;
+  const height = params.height ?? 120;
+  const ribCount = params.ribCount ?? 12;
+  const thickness = params.thickness ?? 3;
+  const prefix = prim.id;
+  const pose = prim.pose || { position: [0, 0, 0], rotation: [0, 0, 0] };
+
+  const panels = [];
+  const ringRadialWidth = outerRadius - innerRadius;
+  const slotDepth = ringRadialWidth / 2;
+
+  // --- Ring: outer boundary with cross-slot notches built into polygon ---
+  const ringVerts = buildLampshadeRingPolygon(outerRadius, ribCount, thickness, slotDepth);
+  const ringEdgeStyles = ringVerts.map(() => ({ jointKind: 'flat', edgeType: 'flat', kerf: 0 }));
+  const ringHoles = [{ type: 'circle', cx: 0, cy: 0, radius: innerRadius }];
+
+  // --- Rib: cross-slot edge style on bottom & top ---
+  const flatEdge = { jointKind: 'flat', edgeType: 'flat', kerf: 0 };
+  const crossSlotEdge = {
+    jointKind: 'cross-slot',
+    edgeType: 'A',
+    kerf: 0,
+    params: { depthRatio: 0.5, slotPosition: 0.5 },
+  };
+
+  // Top ring
+  const topPosed = applyPoseToPanel({ position: [0, height, 0], rotation: [-Math.PI / 2, 0, 0] }, pose);
+  panels.push({
+    id: `${prefix}:ring_top`,
+    label: '顶环',
+    thickness,
+    color: prim.style?.color ?? 0x4fc3f7,
+    position: topPosed.position,
+    rotation: topPosed.rotation,
+    explodeDir: rotateVectorByPose([0, 1, 0], pose),
+    shape: { type: 'polygon', verts2D: ringVerts },
+    edgeStyles: ringEdgeStyles,
+    holes: ringHoles,
+    meta: { sourcePrimitive: prefix, panelKey: 'ring_top', kind: 'macro-panel' },
+  });
+
+  // Bottom ring
+  const bottomPosed = applyPoseToPanel({ position: [0, 0, 0], rotation: [-Math.PI / 2, 0, 0] }, pose);
+  panels.push({
+    id: `${prefix}:ring_bottom`,
+    label: '底环',
+    thickness,
+    color: prim.style?.color ?? 0x4fc3f7,
+    position: bottomPosed.position,
+    rotation: bottomPosed.rotation,
+    explodeDir: rotateVectorByPose([0, -1, 0], pose),
+    shape: { type: 'polygon', verts2D: ringVerts },
+    edgeStyles: ringEdgeStyles,
+    holes: ringHoles,
+    meta: { sourcePrimitive: prefix, panelKey: 'ring_bottom', kind: 'macro-panel' },
+  });
+
+  // Ribs (vertical, radially arranged, cross-slot at top & bottom)
+  const ribWidth = ringRadialWidth;
+  const ribHeight = height;
+
+  for (let i = 0; i < ribCount; i++) {
+    const angle = (2 * Math.PI * i) / ribCount;
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+
+    const ribLocal = {
+      position: [
+        innerRadius * cosA + (thickness / 2) * sinA,
+        0,
+        innerRadius * sinA - (thickness / 2) * cosA,
+      ],
+      rotation: [0, -angle, 0],
+    };
+    const ribPosed = applyPoseToPanel(ribLocal, pose);
+
+    panels.push({
+      id: `${prefix}:rib_${i}`,
+      label: `肋片 ${i}`,
+      thickness,
+      color: prim.style?.color ?? 0xffb74d,
+      position: ribPosed.position,
+      rotation: ribPosed.rotation,
+      explodeDir: rotateVectorByPose([cosA, 0, sinA], pose),
+      shape: { type: 'rect', width: ribWidth, height: ribHeight },
+      edgeStyles: {
+        bottom: { ...crossSlotEdge },
+        right: flatEdge,
+        top: { ...crossSlotEdge },
+        left: flatEdge,
+      },
+      holes: collectHoles(model, `${prefix}:rib_${i}`),
+      meta: { sourcePrimitive: prefix, panelKey: `rib_${i}`, kind: 'macro-panel' },
+    });
+  }
+
+  return { panels, connections: [] };
+}
+
+// Build ring outer polygon with radial slot notches at each rib position.
+// The boundary is a circle with rectangular indentations from the outer edge.
+function buildLampshadeRingPolygon(outerR, ribCount, thickness, slotDepth) {
+  const verts = [];
+  const halfW = (thickness + 0.3) / 2;
+  const arcPoints = Math.max(3, Math.ceil(36 / ribCount));
+  const slotAngularOffset = Math.atan2(halfW, outerR);
+  const innerR = outerR - slotDepth;
+
+  for (let i = 0; i < ribCount; i++) {
+    const angle = (2 * Math.PI * i) / ribCount;
+    const nextAngle = (2 * Math.PI * (i + 1)) / ribCount;
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+
+    // 4 slot-notch vertices (CCW: CW-outer → CW-inner → CCW-inner → CCW-outer)
+    verts.push([outerR * cosA + halfW * sinA, outerR * sinA - halfW * cosA]);
+    verts.push([innerR * cosA + halfW * sinA, innerR * sinA - halfW * cosA]);
+    verts.push([innerR * cosA - halfW * sinA, innerR * sinA + halfW * cosA]);
+    verts.push([outerR * cosA - halfW * sinA, outerR * sinA + halfW * cosA]);
+
+    // Smooth arc between this slot and the next
+    const arcStart = angle + slotAngularOffset;
+    const arcEnd = nextAngle - slotAngularOffset;
+    if (arcEnd > arcStart) {
+      for (let j = 1; j <= arcPoints; j++) {
+        const t = j / (arcPoints + 1);
+        const a = arcStart + t * (arcEnd - arcStart);
+        verts.push([outerR * Math.cos(a), outerR * Math.sin(a)]);
+      }
+    }
+  }
+
+  return verts;
 }
 
 export function compilePanelPrimitive(prim, model) {

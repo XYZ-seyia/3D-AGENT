@@ -92,7 +92,7 @@ export function normalizePrimitive(primitive = {}) {
     meta: structuredCloneSafe(primitive.meta || {}),
   };
 
-  if (primitive.primitive === 'box' || primitive.primitive === 'polyhedron' || primitive.primitive === 'shelf') {
+  if (primitive.primitive === 'box' || primitive.primitive === 'polyhedron' || primitive.primitive === 'shelf' || primitive.primitive === 'lampshade') {
     base.shape = primitive.shape ? structuredCloneSafe(primitive.shape) : null;
   }
 

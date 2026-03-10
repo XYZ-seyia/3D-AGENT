@@ -65,6 +65,7 @@ export {
   compileModelToAssembly,
   compileBoxMacro,
   compilePolyhedronMacro,
+  compileLampshadeMacro,
   compilePanelPrimitive,
 } from './macro-models.js';
 

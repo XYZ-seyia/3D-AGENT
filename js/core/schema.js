@@ -21,6 +21,7 @@ export const AI_WRITABLE_FIELDS = {
     'joint.kind',
     'joint.kerf',
     'joint.edgeTypes',
+    'joint.params',
     'meta.source',
   ],
   override: [
@@ -113,6 +114,9 @@ export function normalizeConnection(connection = {}) {
         : Array.isArray(connection.edgeTypes)
           ? [...connection.edgeTypes]
           : ['A', 'B'],
+      params: connection.joint?.params ? structuredCloneSafe(connection.joint.params) : {},
+      paramsA: connection.joint?.paramsA ? structuredCloneSafe(connection.joint.paramsA) : undefined,
+      paramsB: connection.joint?.paramsB ? structuredCloneSafe(connection.joint.paramsB) : undefined,
     },
     meta: {
       source: connection.meta?.source || 'manual',

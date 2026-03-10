@@ -165,12 +165,20 @@ function applyConnectionsToPanels(panels, connections) {
     const kind = conn.joint?.kind || 'finger';
     const kerf = conn.joint?.kerf ?? 0;
     const [typeA, typeB] = conn.joint?.edgeTypes || ['A', 'B'];
-    const style = (edgeType) => ({ jointKind: kind, edgeType, kerf });
+    const styleA = { jointKind: kind, edgeType: typeA, kerf, params: conn.joint?.paramsA || {} };
+    const styleB = { jointKind: kind, edgeType: typeB, kerf, params: conn.joint?.paramsB || {} };
     if (pA.edgeStyles && typeof pA.edgeStyles === 'object' && !Array.isArray(pA.edgeStyles)) {
-      if (conn.edgeA in pA.edgeStyles) pA.edgeStyles[conn.edgeA] = style(typeA);
+      if (conn.edgeA in pA.edgeStyles) pA.edgeStyles[conn.edgeA] = styleA;
     }
     if (pB.edgeStyles && typeof pB.edgeStyles === 'object' && !Array.isArray(pB.edgeStyles)) {
-      if (conn.edgeB in pB.edgeStyles) pB.edgeStyles[conn.edgeB] = style(typeB);
+      if (conn.edgeB in pB.edgeStyles) pB.edgeStyles[conn.edgeB] = styleB;
+    }
+
+    if (kind === 'tab-mortise' && conn.joint?.paramsB?.slots) {
+      if (!pB.holes) pB.holes = [];
+      for (const slot of conn.joint.paramsB.slots) {
+        pB.holes.push({ type: 'rect', x: slot.cx, y: slot.cy, width: slot.w, height: slot.h });
+      }
     }
   }
 }

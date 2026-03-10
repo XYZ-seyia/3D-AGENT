@@ -577,7 +577,7 @@
   <div class="slide" id="slide-1">
     <div class="slide-num">02 · 核心洞察</div>
     <h2>生成器、编辑器、AI <span class="highlight">不是三个产品</span></h2>
-    <p class="subtitle" style="margin-bottom:16px">它们共享同一个结构模型、同一套原语引擎与同一条制造链路</p>
+    <p class="subtitle" style="margin-bottom:16px">它们共享同一个结构模型、同一套元素引擎与同一条制造链路</p>
 
     <div class="arch-flow">
       <div class="arch-node">
@@ -793,7 +793,7 @@
           </div>
           <div class="arch-connector">↓</div>
           <div class="arch-layer">
-            <div class="arch-side-label">宏模型层</div>
+            <div class="arch-side-label">组件层</div>
             <div class="arch-content">
               <div class="arch-row-title">MacroModels · 编译层</div>
               <div class="arch-modules">
@@ -866,9 +866,9 @@
           <div class="card" style="border-color:rgba(16,185,129,0.3);background:rgba(16,185,129,0.05)">
             <div class="row" style="gap:10px;margin-bottom:6px">
               <span style="font-size:18px">✅</span>
-              <span style="font-size:13px;font-weight:600;color:var(--green)">自建原语引擎是正确路线</span>
+              <span style="font-size:13px;font-weight:600;color:var(--green)">自建元素引擎是正确路线</span>
             </div>
-            <p style="font-size:12px;color:var(--text2);line-height:1.4">核心 IP（接合引擎 + 宏模型编译 + 结构化 AI 约束）不依赖外部 CAD，且更贴近激光切割拼装的制造约束</p>
+            <p style="font-size:12px;color:var(--text2);line-height:1.4">核心 IP（接合引擎 + 组件编译 + 结构化 AI 约束）不依赖外部 CAD，且更贴近激光切割拼装的制造约束</p>
           </div>
         </div>
       </div>
@@ -962,7 +962,7 @@
           <td>无</td>
           <td>无</td>
           <td><span class="partial">⚠ 低（自由几何）</span></td>
-          <td><span class="check">✓ 高（原语兜底）</span></td>
+          <td><span class="check">✓ 高（元素兜底）</span></td>
         </tr>
         <tr>
           <td class="feat-name">社区 / Remix</td>
@@ -994,7 +994,7 @@
       </div>
       <div class="moat-item">
         <h4>📐 结构化 AI 约束</h4>
-        <p>AI 只输出原语操作，精度由引擎保证，根本性解决 AI 空间推理不可靠问题</p>
+        <p>AI 只输出元素操作，精度由引擎保证，根本性解决 AI 空间推理不可靠问题</p>
       </div>
       <div class="moat-item">
         <h4>✂️ 制造闭环</h4>
@@ -1779,7 +1779,7 @@ function initFlywheelCanvas() {
   const flywheels = [
     { label: '内容飞轮', sub: '官方种子 → 社区变体', color: '#6366f1', angle: -Math.PI/2 },
     { label: 'AI 飞轮', sub: 'Remix → 训练数据', color: '#06b6d4', angle: -Math.PI/2 + Math.PI*2/3 },
-    { label: '原语飞轮', sub: '高频行为 → 新原语', color: '#10b981', angle: -Math.PI/2 + Math.PI*4/3 },
+    { label: '元素飞轮', sub: '高频行为 → 新元素', color: '#10b981', angle: -Math.PI/2 + Math.PI*4/3 },
   ];
 
   function draw() {

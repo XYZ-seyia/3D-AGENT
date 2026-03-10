@@ -121,6 +121,31 @@ select.pinput{text-align:left}
 .empty{font-size:12px;color:var(--text2);text-align:center;padding:18px 10px;line-height:1.5;}
 .subnote{font-size:11px;color:var(--text2);line-height:1.5;margin-top:8px}
 
+/* Publish dialog */
+.modal-backdrop{position:fixed;inset:0;background:rgba(4,4,10,.7);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;z-index:30;padding:24px;}
+.modal-backdrop.open{display:flex;}
+.modal-panel{width:min(960px,100%);max-height:min(88vh,900px);background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 28px 80px rgba(0,0,0,.45);}
+.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 18px;border-bottom:1px solid var(--border);}
+.modal-title{font-size:16px;font-weight:800;}
+.modal-desc{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.6;}
+.modal-body{display:grid;grid-template-columns:320px 1fr;min-height:0;overflow:hidden;}
+.modal-side{padding:16px 18px;border-right:1px solid var(--border);overflow-y:auto;}
+.modal-main{display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+.publish-summary{font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:12px;}
+.publish-options{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+.publish-option{padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);}
+.publish-option input{margin-right:8px;}
+.publish-card{padding:12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);margin-top:10px;}
+.publish-card h4{font-size:12px;margin-bottom:6px;}
+.publish-list{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:11px;color:var(--text2);}
+.publish-item{padding:7px 8px;border-radius:8px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);}
+.publish-checks{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;}
+.publish-check{font-size:11px;color:var(--text2);padding:7px 8px;border-radius:8px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);display:flex;align-items:center;gap:6px;}
+.publish-preview-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.publish-preview-body{padding:12px 14px;overflow:auto;font-family:'SF Mono','Fira Code',monospace;font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-word;flex:1;background:#0d0d14;}
+.publish-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 14px;border-top:1px solid var(--border);}
+.publish-badge{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid rgba(16,185,129,.3);color:var(--green);background:rgba(16,185,129,.12);}
+
 /* Rotation picker */
 .rotpicker{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px;}
 .rotbtn{padding:5px 4px;border-radius:7px;font-size:10px;cursor:pointer;border:1px solid var(--border);
@@ -152,7 +177,7 @@ select.pinput{text-align:left}
     <button class="tbtn" id="btn-rot1" title="竖板·朝侧 (2)" onclick="setRotPreset(1)">⬛ 竖板·侧</button>
     <button class="tbtn" id="btn-rot2" title="水平板 (3)" onclick="setRotPreset(2)">▬ 水平板</button>
     <div class="view-switch">
-      <button class="tbtn active" id="btn-view-macro" onclick="setViewMode('macro')">◫ 宏视图</button>
+      <button class="tbtn active" id="btn-view-macro" onclick="setViewMode('macro')">◫ 组件视图</button>
       <button class="tbtn" id="btn-view-expanded" onclick="setViewMode('expanded')">▦ 展开视图</button>
     </div>
     <div class="conn-pill"><span class="cpulse"></span><span id="ccount">0</span> 个卡槽</div>
@@ -236,6 +261,7 @@ select.pinput{text-align:left}
             <button class="rotbtn" id="rp1" onclick="setRotPreset(1)">⬛<br>竖·侧</button>
             <button class="rotbtn" id="rp2" onclick="setRotPreset(2)">▬<br>水平</button>
           </div>
+          <button class="rotbtn" id="mirrorBtn" onclick="toggleMirror()" style="width:100%;margin-top:4px;padding:6px 4px">⇔ 反转（镜像）</button>
         </div>
         <div style="margin-top:8px">
           <div style="font-size:11px;color:var(--text2);margin-bottom:4px">边缘状态</div>
@@ -261,12 +287,9 @@ select.pinput{text-align:left}
         </div>
         <div class="prow">
           <span class="plabel">接合类型</span>
-          <select class="pinput" id="bjoint" onchange="upBoxJoint(this.value)">
-            <option value="finger">指接榫</option>
-            <option value="tab">插榫</option>
-          </select>
+          <select class="pinput" id="bjoint" onchange="upBoxJoint(this.value)"></select>
         </div>
-        <div class="subnote" id="boxFaceHint">宏视图下，点击任一展开面都会选中整个盒子宏原语。</div>
+        <div class="subnote" id="boxFaceHint">组件视图下，点击任一展开面都会选中整个盒子组件。</div>
       </div>
     </div>
     <div class="jsec">
@@ -277,6 +300,60 @@ select.pinput{text-align:left}
       <div id="jbody"></div>
     </div>
   </aside>
+</div>
+
+<div class="modal-backdrop" id="publishOverlay">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="publishTitle">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="publishTitle">发布生成器</div>
+        <div class="modal-desc">发布时不会直接改写当前编辑中的结构。你可以先预览“封装为组件”或“自由结构发布”的结果，再决定保留哪些参数。</div>
+      </div>
+      <button class="tbtn" id="btn-publish-close-top">关闭</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-side">
+        <div class="rtitle">结构摘要</div>
+        <div class="publish-summary" id="publishSummary"></div>
+
+        <div class="rtitle" style="margin-top:14px">发布方式</div>
+        <div class="publish-options" id="publishOptions"></div>
+
+        <div class="publish-card" id="publishCandidateCard" style="display:none">
+          <h4 id="publishCandidateTitle">建议封装为组件</h4>
+          <div class="subnote" id="publishCandidateDesc"></div>
+
+          <div class="rtitle" style="margin-top:12px">识别依据</div>
+          <div class="publish-list" id="publishReasons"></div>
+
+          <div class="rtitle" style="margin-top:12px">保留为组件参数</div>
+          <div class="publish-checks" id="publishRetainedParams"></div>
+
+          <div class="rtitle" style="margin-top:12px">可能丢失</div>
+          <div class="publish-list" id="publishDroppedFields"></div>
+        </div>
+
+        <div class="publish-card" id="publishFreeCard">
+          <h4>自由结构发布</h4>
+          <div class="subnote" id="publishFreeDesc">保持当前 panel + connections 结构，不进行抽象合并。</div>
+        </div>
+      </div>
+      <div class="modal-main">
+        <div class="publish-preview-head">
+          <div>
+            <div class="rtitle" style="margin-bottom:4px">发布预览 JSON</div>
+            <div class="subnote" id="publishPreviewMeta"></div>
+          </div>
+          <span class="publish-badge" id="publishConfidence">预览</span>
+        </div>
+        <div class="publish-preview-body" id="publishPreviewJson"></div>
+        <div class="publish-actions">
+          <button class="tbtn" id="btn-copy-publish-json">复制 JSON</button>
+          <button class="tbtn" id="btn-publish-close-bottom">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -312,6 +389,8 @@ import {
 import { compileModelToAssembly } from './js/core/macro-models.js';
 import { renderAssembly } from './js/core/assembly-renderer.js';
 import { listMacroTemplates, createMacroTemplatePrimitive } from './js/core/macro-registry.js';
+import { analyzePublishCandidates, buildPublishedModelPreview } from './js/core/publish-recognizers.js';
+import { listJointTypes, getJointType } from './js/core/joint-registry.js';
 
 // ─────────────────────────────────────────────
 //  Inlined engine (joint-kernel + joint-policies)
@@ -394,6 +473,14 @@ let selectedPanelId = null;
 let viewMode = 'macro';
 let currentAssembly = { panels: [], connections: [] };
 const compiledPanelIndex = new Map();
+let publishState = {
+  isOpen: false,
+  analysis: null,
+  selectedMode: 'freeAssembly',
+  selectedCandidateId: null,
+  retainedParams: {},
+  previewModel: null,
+};
 
 const COLORS = [0x6366f1,0x10b981,0xf59e0b,0xef4444,0x8b5cf6,0x06b6d4,0xec4899,0x84cc16];
 
@@ -454,7 +541,7 @@ function addMacroTemplate(templateId) {
 function duplicatePrimitiveInstance(sourcePrimitive) {
   if (!sourcePrimitive) return null;
   if (sourcePrimitive.primitive === 'panel') {
-    return addPanel({
+    const np = addPanel({
       label: `${sourcePrimitive.label || '面板'}*`,
       w: sourcePrimitive.shape?.width,
       h: sourcePrimitive.shape?.height,
@@ -467,6 +554,8 @@ function duplicatePrimitiveInstance(sourcePrimitive) {
       rot: sourcePrimitive.pose?.rotation ? [...sourcePrimitive.pose.rotation] : [...ROT_PRESETS[0]],
       color: sourcePrimitive.style?.color,
     });
+    if (sourcePrimitive.mirrored) np.mirrored = true;
+    return np;
   }
 
   const duplicated = structuredClone(sourcePrimitive);
@@ -558,6 +647,196 @@ function detectProximity() {
     }
   }
   return { snapped, nearby };
+}
+
+// ─────────────────────────────────────────────
+//  Cross-slot detection — two panels intersecting through each other
+// ─────────────────────────────────────────────
+function detectCrossSlotPairs(edgeSnapped) {
+  const skip = new Set(edgeSnapped.map(c => [c.panelA, c.panelB].sort().join(':')));
+  const panels = model.primitives.filter(p => p.primitive === 'panel' && p.shape?.type === 'rect');
+  const results = [];
+  for (let i = 0; i < panels.length; i++) {
+    for (let j = i + 1; j < panels.length; j++) {
+      if (skip.has([panels[i].id, panels[j].id].sort().join(':'))) continue;
+      const info = computeCrossSlot(panels[i], panels[j]);
+      if (info) results.push(info);
+    }
+  }
+  return results;
+}
+
+function computeCrossSlot(pA, pB) {
+  const eA = worldEdges(pA), eB = worldEdges(pB);
+  const nA = eA[0].normal, nB = eB[0].normal;
+
+  if (Math.abs(nA.dot(nB)) > 0.3) return null;
+
+  const oA = eA[0].start.clone();
+  const xA = eA[0].end.clone().sub(oA);
+  const yA = eA[3].start.clone().sub(oA);
+  const wA = xA.length(), hA = yA.length();
+  const xdA = xA.clone().normalize(), ydA = yA.clone().normalize();
+
+  const oB = eB[0].start.clone();
+  const xB = eB[0].end.clone().sub(oB);
+  const yB = eB[3].start.clone().sub(oB);
+  const wB = xB.length(), hB = yB.length();
+  const xdB = xB.clone().normalize(), ydB = yB.clone().normalize();
+
+  const thickA = pA.thickness ?? pA.material?.thickness ?? 3;
+  const thickB = pB.thickness ?? pB.material?.thickness ?? 3;
+
+  const cB = oB.clone().add(xB.clone().multiplyScalar(0.5)).add(yB.clone().multiplyScalar(0.5))
+    .add(nB.clone().multiplyScalar(thickB / 2));
+  const dBA = cB.clone().sub(oA);
+  const bx = dBA.dot(xdA), by = dBA.dot(ydA);
+
+  const cA = oA.clone().add(xA.clone().multiplyScalar(0.5)).add(yA.clone().multiplyScalar(0.5))
+    .add(nA.clone().multiplyScalar(thickA / 2));
+  const dAB = cA.clone().sub(oB);
+  const ax = dAB.dot(xdB), ay = dAB.dot(ydB);
+
+  const tol = 5;
+  if (bx < -tol || bx > wA + tol || by < -tol || by > hA + tol) return null;
+  if (ax < -tol || ax > wB + tol || ay < -tol || ay > hB + tol) return null;
+
+  const distB = Math.abs(dBA.dot(nA));
+  const extB = Math.abs(wB * xdB.dot(nA)) + Math.abs(hB * ydB.dot(nA));
+  if (distB > extB * 0.5 + 5) return null;
+
+  const distA = Math.abs(dAB.dot(nB));
+  const extA = Math.abs(wA * xdA.dot(nB)) + Math.abs(hA * ydA.dot(nB));
+  if (distA > extA * 0.5 + 5) return null;
+
+  const interDir = new THREE.Vector3().crossVectors(nA, nB).normalize();
+  const depthRatio = 0.5;
+  const cl = v => Math.max(0, Math.min(1, v));
+
+  const iAx = Math.abs(interDir.dot(xdA)), iAy = Math.abs(interDir.dot(ydA));
+  let edgeA, posA, depthA;
+  if (iAx >= iAy) {
+    edgeA = 'right';
+    posA = cl(by / hA);
+    depthA = wA * depthRatio;
+  } else {
+    edgeA = 'top';
+    posA = cl(1 - bx / wA);
+    depthA = hA * depthRatio;
+  }
+
+  const iBx = Math.abs(interDir.dot(xdB)), iBy = Math.abs(interDir.dot(ydB));
+  let edgeB, posB, depthB;
+  if (iBx >= iBy) {
+    edgeB = 'left';
+    posB = cl(1 - ay / hB);
+    depthB = wB * depthRatio;
+  } else {
+    edgeB = 'bottom';
+    posB = cl(ax / wB);
+    depthB = hB * depthRatio;
+  }
+
+  return {
+    panelA: pA.id, edgeA,
+    panelB: pB.id, edgeB,
+    paramsA: { slotPosition: posA, slotDepth: depthA, slotWidth: thickB, depthRatio },
+    paramsB: { slotPosition: posB, slotDepth: depthB, slotWidth: thickA, depthRatio },
+  };
+}
+
+// ─────────────────────────────────────────────
+//  Tab-mortise detection — panel edge touching another panel's face
+// ─────────────────────────────────────────────
+function detectTabMortisePairs(edgeSnapped, crossSlotPairs) {
+  const skip = new Set([
+    ...edgeSnapped.map(c => [c.panelA, c.panelB].sort().join(':')),
+    ...crossSlotPairs.map(c => [c.panelA, c.panelB].sort().join(':')),
+  ]);
+  const panels = model.primitives.filter(p => p.primitive === 'panel' && p.shape?.type === 'rect');
+  const results = [];
+  for (let i = 0; i < panels.length; i++) {
+    for (let j = i + 1; j < panels.length; j++) {
+      const key = [panels[i].id, panels[j].id].sort().join(':');
+      if (skip.has(key)) continue;
+      const ab = computeTabMortise(panels[i], panels[j]);
+      if (ab) { results.push(ab); continue; }
+      const ba = computeTabMortise(panels[j], panels[i]);
+      if (ba) results.push(ba);
+    }
+  }
+  return results;
+}
+
+function computeTabMortise(tabPanel, slotPanel) {
+  const eTab = worldEdges(tabPanel), eSlot = worldEdges(slotPanel);
+  const nTab = eTab[0].normal, nSlot = eSlot[0].normal;
+  if (Math.abs(nTab.dot(nSlot)) > 0.3) return null;
+
+  const oS = eSlot[0].start.clone();
+  const xdS = eSlot[0].end.clone().sub(oS).normalize();
+  const ydS = eSlot[3].start.clone().sub(oS).normalize();
+  const wS = slotPanel.shape?.width ?? 80;
+  const hS = slotPanel.shape?.height ?? 60;
+  const thickS = slotPanel.thickness ?? slotPanel.material?.thickness ?? 3;
+  const thickT = tabPanel.thickness ?? tabPanel.material?.thickness ?? 3;
+
+  const FACE_DIST = 4;
+  const EDGE_MARGIN = 5;
+  const TAB_WIDTH = 10;
+
+  for (const edge of eTab) {
+    const ds = edge.start.clone().sub(oS);
+    const de = edge.end.clone().sub(oS);
+    const d1 = ds.dot(nSlot), d2 = de.dot(nSlot);
+
+    const nearFront = Math.abs(d1) < FACE_DIST && Math.abs(d2) < FACE_DIST;
+    const nearBack = Math.abs(d1 - thickS) < FACE_DIST && Math.abs(d2 - thickS) < FACE_DIST;
+    if (!nearFront && !nearBack) continue;
+
+    const p1x = ds.dot(xdS), p1y = ds.dot(ydS);
+    const p2x = de.dot(xdS), p2y = de.dot(ydS);
+
+    if (p1x < EDGE_MARGIN || p1x > wS - EDGE_MARGIN) continue;
+    if (p2x < EDGE_MARGIN || p2x > wS - EDGE_MARGIN) continue;
+    if (p1y < EDGE_MARGIN || p1y > hS - EDGE_MARGIN) continue;
+    if (p2y < EDGE_MARGIN || p2y > hS - EDGE_MARGIN) continue;
+
+    const edx = p2x - p1x, edy = p2y - p1y;
+    const lineLen = Math.hypot(edx, edy);
+    if (lineLen < TAB_WIDTH) continue;
+
+    let tabCount = Math.max(1, Math.floor(lineLen / (TAB_WIDTH * 3)));
+    const gap = (lineLen - tabCount * TAB_WIDTH) / (tabCount + 1);
+    if (gap < 3) { tabCount = Math.max(1, tabCount - 1); }
+    const finalGap = (lineLen - tabCount * TAB_WIDTH) / (tabCount + 1);
+    if (finalGap < 2) continue;
+
+    const ldx = edx / lineLen, ldy = edy / lineLen;
+    const tolerance = 0.15;
+    const slots = [];
+    for (let ti = 0; ti < tabCount; ti++) {
+      const t = finalGap * (ti + 1) + TAB_WIDTH * (ti + 0.5);
+      const cx = p1x + ldx * t, cy = p1y + ldy * t;
+      let slotW, slotH;
+      if (Math.abs(ldx) > Math.abs(ldy)) {
+        slotW = TAB_WIDTH + tolerance * 2;
+        slotH = thickT + tolerance * 2;
+      } else {
+        slotW = thickT + tolerance * 2;
+        slotH = TAB_WIDTH + tolerance * 2;
+      }
+      slots.push({ cx, cy, w: slotW, h: slotH });
+    }
+
+    return {
+      panelA: tabPanel.id, edgeA: edge.id,
+      panelB: slotPanel.id, edgeB: '_face_',
+      paramsA: { tabWidth: TAB_WIDTH, tabDepth: thickS, tabCount },
+      paramsB: { slots, tolerance },
+    };
+  }
+  return null;
 }
 
 // Compute position to snap panel so that edge midpoints coincide
@@ -656,7 +935,13 @@ let prevHash = '';
 
 function updateConnections(force = false) {
   const { snapped, nearby } = detectProximity();
-  const hash = snapped.map(c => `${c.panelA}:${c.edgeA}:${c.panelB}:${c.edgeB}`).sort().join('|');
+  const crossSlots = detectCrossSlotPairs(snapped);
+  const tabMortises = detectTabMortisePairs(snapped, crossSlots);
+
+  const hashParts = snapped.map(c => `e:${c.panelA}:${c.edgeA}:${c.panelB}:${c.edgeB}`);
+  crossSlots.forEach(c => hashParts.push(`x:${c.panelA}:${c.edgeA}:${c.panelB}:${c.edgeB}`));
+  tabMortises.forEach(c => hashParts.push(`t:${c.panelA}:${c.edgeA}:${c.panelB}`));
+  const hash = hashParts.sort().join('|');
 
   if (hash !== prevHash || force) {
     clearAutoConnections(model);
@@ -668,6 +953,38 @@ function updateConnections(force = false) {
         edgeB: c.edgeB,
         joint: { kind: 'finger', kerf: 0, edgeTypes: ['A', 'B'] },
         meta: { source: 'system', auto: true, score: c.score },
+      });
+    }
+    for (const c of crossSlots) {
+      addConnection(model, {
+        panelA: c.panelA,
+        edgeA: c.edgeA,
+        panelB: c.panelB,
+        edgeB: c.edgeB,
+        joint: {
+          kind: 'cross-slot',
+          kerf: 0,
+          edgeTypes: ['A', 'B'],
+          paramsA: c.paramsA,
+          paramsB: c.paramsB,
+        },
+        meta: { source: 'system', auto: true },
+      });
+    }
+    for (const c of tabMortises) {
+      addConnection(model, {
+        panelA: c.panelA,
+        edgeA: c.edgeA,
+        panelB: c.panelB,
+        edgeB: c.edgeB,
+        joint: {
+          kind: 'tab-mortise',
+          kerf: 0,
+          edgeTypes: ['A', 'B'],
+          paramsA: c.paramsA,
+          paramsB: c.paramsB,
+        },
+        meta: { source: 'system', auto: true },
       });
     }
     prevHash = hash;
@@ -936,7 +1253,10 @@ window.setViewMode = setViewMode;
 
 function setRotPreset(idx) {
   if (!selectedId) return;
-  rotatePrimitive(model, selectedId, [...ROT_PRESETS[idx]]);
+  const p = getP(selectedId);
+  const rot = [...ROT_PRESETS[idx]];
+  if (p && p.mirrored) rot[1] += Math.PI;
+  rotatePrimitive(model, selectedId, rot);
   rebuildFromModel();
   selectedPanelId = getFirstRenderedPanelId(selectedId);
   rebuildFromModel();
@@ -945,6 +1265,22 @@ function setRotPreset(idx) {
   ['rp0', 'rp1', 'rp2'].forEach((id, i) => document.getElementById(id)?.classList.toggle('active', i === idx));
 }
 window.setRotPreset = setRotPreset;
+
+function toggleMirror() {
+  if (!selectedId) return;
+  const p = getP(selectedId);
+  if (!p || p.primitive !== 'panel') return;
+  p.mirrored = !p.mirrored;
+  const rot = p.pose?.rotation || [0, 0, 0];
+  const delta = p.mirrored ? Math.PI : -Math.PI;
+  rotatePrimitive(model, selectedId, [rot[0], rot[1] + delta, rot[2]]);
+  rebuildFromModel();
+  selectedPanelId = getFirstRenderedPanelId(selectedId);
+  rebuildFromModel();
+  updateConnections(true);
+  updateRightPanel();
+}
+window.toggleMirror = toggleMirror;
 
 function upSel(key, val) {
   if (!selectedId || isNaN(val) || val < 1) return;
@@ -1033,7 +1369,7 @@ function updateRightPanel() {
   if (!p) return;
 
   if (p.primitive === 'box') {
-    propTitle.textContent = '盒子宏原语';
+    propTitle.textContent = '盒子组件';
     boxFields.style.display = '';
     const params = p.params || {};
     document.getElementById('bl').value = params.length ?? 120;
@@ -1045,8 +1381,8 @@ function updateRightPanel() {
     const faceLabel = faceInfo && faceInfo.sourcePrimitiveId === p.id && faceInfo.panelKey ? `${faceInfo.label}（${faceInfo.panelKey}）` : '整个盒子';
     document.getElementById('boxFaceHint').textContent =
       viewMode === 'expanded'
-        ? `当前是展开视图，已选中：${faceLabel}。参数修改仍回写到同一个 box 宏原语。`
-        : '当前是宏视图，点击任一展开面都会选中整个盒子宏原语。';
+        ? `当前是展开视图，已选中：${faceLabel}。参数修改仍回写到同一个 box 组件。`
+        : '当前是组件视图，点击任一展开面都会选中整个盒子组件。';
   } else {
     propTitle.textContent = '面板属性';
     panelFields.style.display = '';
@@ -1067,11 +1403,18 @@ function updateRightPanel() {
   }
 
   const rot = p.pose?.rotation || [0, 0, 0];
-  const rotIdx = ROT_PRESETS.findIndex(r => r.every((v, i) => Math.abs(v - rot[i]) < 0.01));
+  const isMirrored = p.mirrored || false;
+  const baseRot = isMirrored ? [rot[0], rot[1] - Math.PI, rot[2]] : rot;
+  const rotIdx = ROT_PRESETS.findIndex(r => r.every((v, i) => {
+    let d = Math.abs(baseRot[i] - r[i]) % (2 * Math.PI);
+    if (d > Math.PI) d = 2 * Math.PI - d;
+    return d < 0.01;
+  }));
   ['rp0', 'rp1', 'rp2', 'btn-rot0', 'btn-rot1', 'btn-rot2'].forEach((id, index) => {
     const presetIndex = index % 3;
     document.getElementById(id)?.classList.toggle('active', presetIndex === rotIdx);
   });
+  document.getElementById('mirrorBtn')?.classList.toggle('active', isMirrored);
 }
 
 function syntaxHL(json) {
@@ -1096,9 +1439,185 @@ function renderMacroTemplates() {
   }
 }
 
+function renderJointOptions() {
+  const select = document.getElementById('bjoint');
+  if (!select) return;
+  select.innerHTML = '';
+  const joints = listJointTypes({ editorReady: true });
+  for (const jt of joints) {
+    if (jt.id === 'flat') continue;
+    const opt = document.createElement('option');
+    opt.value = jt.id === 'tab-slot' ? 'tab' : jt.id;
+    opt.textContent = `${jt.icon} ${jt.label}`;
+    opt.title = jt.description;
+    select.appendChild(opt);
+  }
+}
+
+function openPublishDialog() {
+  const analysis = analyzePublishCandidates(model);
+  const firstMacroCandidate = analysis.candidates.find(item => item.kind === 'macroCandidate') || null;
+  publishState = {
+    isOpen: true,
+    analysis,
+    selectedMode: firstMacroCandidate ? 'macro' : 'freeAssembly',
+    selectedCandidateId: firstMacroCandidate?.id || null,
+    retainedParams: Object.fromEntries((firstMacroCandidate?.retainedParams || []).map(key => [key, true])),
+    previewModel: null,
+  };
+  refreshPublishPreview();
+  document.getElementById('publishOverlay')?.classList.add('open');
+}
+
+function closePublishDialog() {
+  publishState.isOpen = false;
+  document.getElementById('publishOverlay')?.classList.remove('open');
+}
+
+function getActivePublishCandidate() {
+  return publishState.analysis?.candidates?.find(item => item.id === publishState.selectedCandidateId) || null;
+}
+
+function refreshPublishPreview() {
+  const candidate = getActivePublishCandidate();
+  publishState.previewModel = buildPublishedModelPreview(model, {
+    mode: publishState.selectedMode,
+    candidate,
+    retainedParams: publishState.retainedParams,
+  });
+  renderPublishDialog();
+}
+
+function renderPublishDialog() {
+  if (!publishState.analysis) return;
+  const { summary, candidates } = publishState.analysis;
+  const macroCandidates = candidates.filter(item => item.kind === 'macroCandidate');
+  const activeCandidate = getActivePublishCandidate();
+
+  document.getElementById('publishSummary').innerHTML = [
+    `primitive 数量：${summary.primitiveCount}`,
+    `panel 数量：${summary.panelCount}`,
+    `组件数量：${summary.macroCount}`,
+    `connection 数量：${summary.connectionCount}`,
+    `可选封装候选：${macroCandidates.length}`,
+  ].join('<br>');
+
+  const optionsHost = document.getElementById('publishOptions');
+  optionsHost.innerHTML = '';
+  if (macroCandidates.length > 0) {
+    for (const candidate of macroCandidates) {
+      const wrapper = document.createElement('label');
+      wrapper.className = 'publish-option';
+      wrapper.innerHTML = `<input type="radio" name="publishMode" value="${candidate.id}" ${publishState.selectedMode === 'macro' && publishState.selectedCandidateId === candidate.id ? 'checked' : ''}>
+        封装为 ${candidate.primitiveType} 组件发布
+        <div class="subnote">识别置信度：${candidate.confidence}。会把自由结构抽象为可参数化的组件。</div>`;
+      wrapper.querySelector('input').addEventListener('change', () => {
+        publishState.selectedMode = 'macro';
+        publishState.selectedCandidateId = candidate.id;
+        publishState.retainedParams = Object.fromEntries((candidate.retainedParams || []).map(key => [key, true]));
+        refreshPublishPreview();
+      });
+      optionsHost.appendChild(wrapper);
+    }
+  }
+  const freeOption = document.createElement('label');
+  freeOption.className = 'publish-option';
+  freeOption.innerHTML = `<input type="radio" name="publishMode" value="freeAssembly" ${publishState.selectedMode === 'freeAssembly' ? 'checked' : ''}>
+    按自由结构发布
+    <div class="subnote">保留当前 panel + connections，不做组件抽象。</div>`;
+  freeOption.querySelector('input').addEventListener('change', () => {
+    publishState.selectedMode = 'freeAssembly';
+    refreshPublishPreview();
+  });
+  optionsHost.appendChild(freeOption);
+
+  const candidateCard = document.getElementById('publishCandidateCard');
+  const freeCard = document.getElementById('publishFreeCard');
+  if (publishState.selectedMode === 'macro' && activeCandidate) {
+    candidateCard.style.display = '';
+    freeCard.style.display = 'none';
+    document.getElementById('publishCandidateTitle').textContent = `建议封装为 ${activeCandidate.primitiveType} 组件`;
+    document.getElementById('publishCandidateDesc').textContent =
+      activeCandidate.source === 'existing-macro'
+        ? '当前结构本身已经是组件，可直接按组件方式发布。'
+        : '当前自由结构满足 box 识别规则，适合在发布时封装为组件。';
+    renderPublishItems('publishReasons', activeCandidate.reasons);
+    renderPublishChecks(activeCandidate);
+    renderPublishItems('publishDroppedFields', activeCandidate.droppedFields.length > 0 ? activeCandidate.droppedFields : ['无明显结构信息丢失']);
+  } else {
+    candidateCard.style.display = 'none';
+    freeCard.style.display = '';
+  }
+
+  const previewMeta = publishState.selectedMode === 'macro' && activeCandidate
+    ? `当前预览：${activeCandidate.primitiveType} 组件发布`
+    : '当前预览：自由结构发布';
+  document.getElementById('publishPreviewMeta').textContent = previewMeta;
+  document.getElementById('publishConfidence').textContent =
+    publishState.selectedMode === 'macro' && activeCandidate ? `置信度 ${activeCandidate.confidence}` : '自由结构';
+  document.getElementById('publishPreviewJson').innerHTML = syntaxHL(JSON.stringify(publishState.previewModel, null, 2));
+}
+
+function renderPublishItems(targetId, items) {
+  const host = document.getElementById(targetId);
+  host.innerHTML = '';
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'publish-item';
+    row.textContent = item;
+    host.appendChild(row);
+  }
+}
+
+function renderPublishChecks(candidate) {
+  const host = document.getElementById('publishRetainedParams');
+  host.innerHTML = '';
+  for (const key of candidate.retainedParams || []) {
+    const label = document.createElement('label');
+    label.className = 'publish-check';
+    const checked = publishState.retainedParams[key] !== false;
+    label.innerHTML = `<input type="checkbox" ${checked ? 'checked' : ''}> ${publishParamLabel(key)}`;
+    label.querySelector('input').addEventListener('change', e => {
+      publishState.retainedParams[key] = e.target.checked;
+      refreshPublishPreview();
+    });
+    host.appendChild(label);
+  }
+}
+
+function publishParamLabel(key) {
+  const map = {
+    length: '长度',
+    width: '宽度',
+    height: '高度',
+    thickness: '厚度',
+    joint: '接合类型',
+  };
+  return map[key] || key;
+}
+
+async function copyPublishJson() {
+  if (!publishState.previewModel) return;
+  const raw = JSON.stringify(publishState.previewModel, null, 2);
+  try {
+    await navigator.clipboard.writeText(raw);
+    document.getElementById('publishPreviewMeta').textContent = '已复制发布 JSON 到剪贴板';
+  } catch {
+    document.getElementById('publishPreviewMeta').textContent = '复制失败，请手动复制预览区内容';
+  }
+}
+
 function updateJson() {
   document.getElementById('jbody').innerHTML = syntaxHL(JSON.stringify(normalizeModel(model), null, 2));
 }
+
+document.getElementById('btn-pub')?.addEventListener('click', openPublishDialog);
+document.getElementById('btn-publish-close-top')?.addEventListener('click', closePublishDialog);
+document.getElementById('btn-publish-close-bottom')?.addEventListener('click', closePublishDialog);
+document.getElementById('btn-copy-publish-json')?.addEventListener('click', copyPublishJson);
+document.getElementById('publishOverlay')?.addEventListener('click', e => {
+  if (e.target.id === 'publishOverlay') closePublishDialog();
+});
 
 // ─────────────────────────────────────────────
 //  Resize + render loop
@@ -1123,6 +1642,7 @@ animate();
 //  Init: L-shaped starter scene
 // ─────────────────────────────────────────────
 renderMacroTemplates();
+renderJointOptions();
 window.loadScene('lshape');
 updateJson();
 

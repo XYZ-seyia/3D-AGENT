@@ -40,7 +40,17 @@ export {
   normalizeEdgeStyle,
   getBoxEdgeStyles,
   computeSharedEdgeTypes,
+  validateJoint,
 } from './joint-policies.js';
+
+export {
+  listJointTypes,
+  getJointType,
+  getJointDefaults,
+  getJointParamSpecs,
+  getJointConstraints,
+  validateJointForEdge,
+} from './joint-registry.js';
 
 export {
   calcToothCount,
@@ -48,6 +58,7 @@ export {
   buildPolygonJointShape,
   createPanelMesh,
   buildCrossSlotMetadata,
+  registerJointGeometry,
 } from './joint-kernel.js';
 
 export {
@@ -67,3 +78,8 @@ export {
   getMacroTemplate,
   createMacroTemplatePrimitive,
 } from './macro-registry.js';
+
+export {
+  analyzePublishCandidates,
+  buildPublishedModelPreview,
+} from './publish-recognizers.js';

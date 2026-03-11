@@ -244,7 +244,7 @@ document.getElementById('paramThickness').addEventListener('input', e => {
 });
 document.getElementById('paramJoint').addEventListener('change', e => {
   const v = e.target.value;
-  document.getElementById('valJoint').textContent = v === 'tab' ? '插榫' : '指接榫';
+  document.getElementById('valJoint').textContent = v === 'tab' ? '卡舌卡槽' : '指接榫';
   if (!model.primitives[0].joints) model.primitives[0].joints = {};
   model.primitives[0].joints.type = v;
   lastChangeSource = 'slider';

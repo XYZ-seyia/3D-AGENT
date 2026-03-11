@@ -1,0 +1,71 @@
+---
+description: 常见修改任务的定位指南。帮助 AI 快速找到需要修改的文件，避免大范围搜索和读取。
+globs:
+alwaysApply: true
+---
+
+# 修改指南 — 改什么去哪里
+
+## 快速定位表
+
+| 想做的事 | 要改的文件 | 注意事项 |
+|---------|-----------|---------|
+| 添加新的组件类型（如灯罩、书架） | `js/core/macro-models.js` | 写编译函数，返回 `{ panels, connections }`，并在 `compileModelToAssembly` 的 switch 中注册 |
+| 注册组件模板（让编辑器能选到） | `js/core/macro-registry.js` | 添加模板定义 |
+| 修改接合几何（齿形、槽形） | `js/core/joint-kernel.js` | 改 `buildRectJointShape` 或 `buildPolygonJointShape` |
+| 添加新的接合类型 | `js/core/joint-registry.js` + `js/core/joint-kernel.js` | 先在 registry 注册，再在 kernel 实现几何 |
+| 修改边类型分配规则 | `js/core/joint-policies.js` | 改 `getBoxEdgeStyles` 或 `computeSharedEdgeTypes` |
+| 修改 JSON 数据结构 | `js/core/schema.js` | ⚠️ 需产品负责人批准，这是"宪法" |
+| 添加模型操作（增删改元素） | `js/core/model-ops.js` | 无状态函数，入参 model 返回新 model |
+| 修改 3D 渲染逻辑 | `js/core/assembly-renderer.js` | `renderAssembly` / `setExplodeFactor` |
+| 修改编辑器界面和交互 | `js/editor/editor-app.js` | 文件较大，注意定位到具体函数 |
+| 修改编辑器样式 | `css/editor.css` | |
+| 修改盒子 Demo | `js/demos/mvp-box-app.js` + `mvp-box-demo.html` | |
+| 修改 AI Demo | `js/demos/demo-v2-app.js` + `demo-v2.html` | |
+| 修改面板装饰（开孔、雕刻） | `js/face-decorations.js` | |
+| 修改 2D 面编辑器 | `js/face-editor.js` | |
+| 修改发布/识别逻辑 | `js/core/publish-recognizers.js` | |
+
+## 添加新组件的标准流程
+
+1. 在 `js/core/macro-models.js` 中写编译函数：
+```javascript
+export function compileNewMacro(primitive, model) {
+  const panels = [...];       // 生成面板数组
+  const connections = [...];  // 生成连接数组
+  return { panels, connections };
+}
+```
+
+2. 在 `compileModelToAssembly` 的 switch 中注册：
+```javascript
+case 'new_type': return compileNewMacro(prim, model);
+```
+
+3. 在 `js/core/macro-registry.js` 中注册模板（可选，让编辑器 UI 能选到）
+
+4. 不需要改 joint-kernel、renderer 或 model-ops — 它们自动适配
+
+## 绝对不要做的事
+
+- ❌ 不要在 `js/` 根目录的旧文件中添加新功能（`box-generator.js`、`joint-utils.js` 等）
+- ❌ 不要在 HTML 中内联大段 JavaScript 逻辑
+- ❌ 不要绕过 `js/core/` 的接口直接操作几何
+- ❌ 不要修改 `schema.js` 的数据结构定义而不说明影响范围
+- ❌ 不要在 `joint-kernel.js` 中硬编码新接合类型而不在 `joint-registry.js` 注册
+- ❌ 不要覆盖用户的 override 数据
+
+## 导入约定
+
+所有 `js/core/` 的功能通过统一入口导入：
+```javascript
+import { compileModelToAssembly, renderAssembly, addRectPanel } from './core/index.js';
+```
+不要直接 import 子模块（如 `from './core/schema.js'`），除非是在 core 内部的模块间引用。
+
+## 调试技巧
+
+- 3D 预览问题 → 看 `assembly-renderer.js`
+- 接合形状不对 → 看 `joint-kernel.js` 的 `buildRectJointShape`
+- 面板位置不对 → 看 `macro-models.js` 的编译函数中 position 计算
+- 边类型 A/B 分配错误 → 看 `joint-policies.js` 的 `getBoxEdgeStyles`

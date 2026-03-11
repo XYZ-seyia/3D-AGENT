@@ -19,9 +19,9 @@ const JOINT_TYPE_DEFS = {
 
   'tab-slot': {
     id: 'tab-slot',
-    label: '插榫',
+    label: '卡舌卡槽',
     icon: '🔩',
-    description: '间隔式插榫，拆装方便，适合需要反复拆卸的结构',
+    description: '边缘板突出卡舌、腹部板对应位置凹入卡槽，卡舌插入卡槽形成连接',
     params: {
       kerf: { default: 0, min: 0, max: 1, step: 0.05, unit: 'mm', label: '激光切缝补偿' },
     },

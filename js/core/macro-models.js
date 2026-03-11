@@ -46,9 +46,12 @@ export function compileModelToAssembly(model) {
 
 export function compileBoxMacro(prim, model) {
   const { length = 100, width = 60, height = 40, thickness = 3 } = prim.params || {};
-  const jointKind = prim.params?.jointKind || prim.joints?.type || 'finger';
+  const rawJointKind = prim.params?.jointKind || prim.joints?.type || 'finger';
+  const jointKind = rawJointKind === 'tab' ? 'tab-slot' : rawJointKind;
+  const isTabSlot = jointKind === 'tab-slot';
   const hL = length / 2;
   const hW = width / 2;
+  const T = thickness;
   const prefix = prim.id;
   const pose = prim.pose || { position: [0, 0, 0], rotation: [0, 0, 0] };
 
@@ -57,8 +60,8 @@ export function compileBoxMacro(prim, model) {
     { localId: 'back',   label: '后面板', w: length, h: height, color: BOX_COLORS.back,   pos: [-hL, 0, hW],              rot: [0, 0, 0],              explode: [0, 0, 1]  },
     { localId: 'left',   label: '左面板', w: width,  h: height, color: BOX_COLORS.left,   pos: [-hL - thickness, 0, hW],  rot: [0, Math.PI / 2, 0],    explode: [-1, 0, 0] },
     { localId: 'right',  label: '右面板', w: width,  h: height, color: BOX_COLORS.right,  pos: [hL, 0, hW],               rot: [0, Math.PI / 2, 0],    explode: [1, 0, 0]  },
-    { localId: 'bottom', label: '底面板', w: length, h: width,  color: BOX_COLORS.bottom, pos: [-hL, -thickness, hW],      rot: [-Math.PI / 2, 0, 0],   explode: [0, -1, 0] },
-    { localId: 'top',    label: '顶面板', w: length, h: width,  color: BOX_COLORS.top,    pos: [-hL, height, hW],          rot: [-Math.PI / 2, 0, 0],   explode: [0, 1, 0]  },
+    { localId: 'bottom', label: '底面板', w: isTabSlot ? length + 2 * T : length, h: isTabSlot ? width + 2 * T : width, color: BOX_COLORS.bottom, pos: isTabSlot ? [-hL - T, -T, hW + T] : [-hL, -T, hW], rot: [-Math.PI / 2, 0, 0], explode: [0, -1, 0] },
+    { localId: 'top',    label: '顶面板', w: isTabSlot ? length + 2 * T : length, h: isTabSlot ? width + 2 * T : width, color: BOX_COLORS.top,    pos: isTabSlot ? [-hL - T, height, hW + T] : [-hL, height, hW],       rot: [-Math.PI / 2, 0, 0], explode: [0, 1, 0]  },
   ];
 
   const panels = specs.map(s => {
@@ -66,17 +69,21 @@ export function compileBoxMacro(prim, model) {
       position: s.pos,
       rotation: s.rot,
     }, pose);
+    const decoHoles = collectHoles(model, `${prefix}:${s.localId}`) || collectHoles(model, s.localId);
+    const slotHoles = isTabSlot && (s.localId === 'top' || s.localId === 'bottom')
+      ? buildTabSlotBoxHoles(length, width, T) : [];
+    const mergedHoles = [...(decoHoles || []), ...slotHoles];
     return {
     id: `${prefix}:${s.localId}`,
     label: s.label,
-    thickness,
+    thickness: T,
     color: prim.style?.color ?? s.color,
     position: posed.position,
     rotation: posed.rotation,
     explodeDir: rotateVectorByPose(s.explode, pose),
     shape: { type: 'rect', width: s.w, height: s.h },
     edgeStyles: getBoxEdgeStyles(s.localId, jointKind),
-    holes: collectHoles(model, `${prefix}:${s.localId}`) || collectHoles(model, s.localId),
+    holes: mergedHoles.length > 0 ? mergedHoles : null,
     meta: { sourcePrimitive: prefix, panelKey: s.localId, kind: 'macro-panel' },
     };
   });
@@ -341,6 +348,40 @@ function applyOverrides(panels, overrides) {
   }
 }
 
+function buildTabSlotBoxHoles(length, width, thickness) {
+  const T = thickness;
+  const panelW = length + 2 * T;
+  const panelH = width + 2 * T;
+  const holes = [];
+
+  function getTabPositions(edgeLength) {
+    const tabWidth = Math.max(2 * T, 6);
+    const tabCount = Math.max(2, Math.floor(edgeLength / 50));
+    const totalTabSpace = tabCount * tabWidth;
+    if (totalTabSpace > edgeLength) return [];
+    const gap = (edgeLength - totalTabSpace) / (tabCount + 1);
+    if (gap < 2) return [];
+    const positions = [];
+    for (let i = 0; i < tabCount; i++) {
+      const center = gap * (i + 1) + tabWidth * i + tabWidth / 2;
+      positions.push({ center, w: tabWidth });
+    }
+    return positions;
+  }
+
+  for (const tab of getTabPositions(length)) {
+    holes.push({ type: 'rect', x: T + tab.center, y: panelH - T / 2, width: tab.w, height: T });
+    holes.push({ type: 'rect', x: T + tab.center, y: T / 2,          width: tab.w, height: T });
+  }
+
+  for (const tab of getTabPositions(width)) {
+    holes.push({ type: 'rect', x: T / 2,          y: T + tab.center, width: T, height: tab.w });
+    holes.push({ type: 'rect', x: panelW - T / 2, y: T + tab.center, width: T, height: tab.w });
+  }
+
+  return holes;
+}
+
 function collectHoles(model, panelId) {
   const decos = model.decorations?.[panelId];
   if (!decos || decos.length === 0) return null;
@@ -362,11 +403,14 @@ function buildBoxConnections(prefix, jointKind) {
     ['right', 'bottom', 'bottom','right',   ['A', 'B']],
     ['right', 'top',   'top',    'right',   ['A', 'B']],
   ];
-  return pairs.map(([pA, eA, pB, eB, types]) => ({
+  const filtered = jointKind === 'tab-slot'
+    ? pairs.filter(([, eA, , eB]) => eA !== 'top' && eA !== 'bottom' && eB !== 'top' && eB !== 'bottom')
+    : pairs;
+  return filtered.map(([pA, eA, pB, eB, types]) => ({
     id: `${prefix}:conn_${pA}_${eA}_${pB}_${eB}`,
     panelA: `${prefix}:${pA}`, edgeA: eA,
     panelB: `${prefix}:${pB}`, edgeB: eB,
-    joint: { kind: jointKind, kerf: 0, edgeTypes: types },
+    joint: { kind: jointKind === 'tab-slot' ? 'finger' : jointKind, kerf: 0, edgeTypes: types },
     meta: { source: 'macro', auto: false },
   }));
 }

@@ -1,0 +1,104 @@
+---
+description: 项目整体架构、技术栈和核心概念。在每次对话开始、理解项目或做架构决策时自动加载。
+globs:
+alwaysApply: true
+---
+
+# 项目架构
+
+## 一句话定位
+面向激光切割拼装的统一结构内核，让生成器、编辑器与 AI 围绕同一套结构表达协同工作。
+
+## 技术栈
+- 原生 HTML + JavaScript（ES Modules）
+- Three.js（CDN importmap，v0.160.0）
+- 无构建工具、无 package.json
+- 本地运行：`python3 -m http.server 8123`
+
+## 核心链路
+```
+generator / editor / AI → model JSON → compileModelToAssembly() → renderAssembly() → fabrication
+```
+
+## 目录结构（必须熟记）
+
+```
+js/core/          ← 统一结构内核（最重要，所有入口共享）
+  schema.js         数据类型定义（AI可写 vs 系统求解字段）
+  model-ops.js      无状态操作：增删改元素、连接、override
+  macro-models.js   编译层：box/polyhedron → panel+connection
+  macro-registry.js 组件模板注册
+  assembly-renderer.js  Three.js 渲染
+  joint-kernel.js   接合几何生成
+  joint-policies.js 边类型、kerf 规则
+  joint-registry.js 接合类型注册表
+  publish-recognizers.js 发布识别
+  index.js          统一导出
+
+js/editor/
+  editor-app.js     编辑器主逻辑（1600+行，较大）
+
+js/demos/
+  mvp-box-app.js    盒子 Demo 逻辑
+  demo-v2-app.js    AI Demo 逻辑
+
+js/（根目录下为旧版实现，正在迁移中）
+  box-generator.js      旧版盒子（→ 用 core/macro-models.js）
+  joint-utils.js        旧版接合（→ 用 core/joint-kernel.js）
+  polygon-joint-utils.js 旧版多边形接合（→ 用 core/joint-kernel.js）
+  face-editor.js        2D 面编辑器
+  face-decorations.js   装饰 → 几何
+  poly-*.js             多面体相关
+
+css/              ← 各页面样式
+docs/             ← 设计文档
+```
+
+## 页面入口
+- `editor-creator.html` — 创作者编辑器（主入口）
+- `mvp-box-demo.html` — 盒子 Demo
+- `demo-v2.html` — AI+画布协作 Demo
+- `polyhedra-standalone.html` — 多面体生成器
+- `executive-demo.html` — 演示版
+
+## 核心概念
+
+### 两种基础元素
+- **panel** — 一块板（形状、厚度、位姿、边信息）
+- **connection** — 两条边的连接关系（接合类型、A/B边类型、kerf）
+
+### 铁律：所有组件必须编译到 panel + connection
+- `box` → 6 panels + 12 connections
+- `polyhedron` → N panels + shared-edge connections
+- 新组件也必须遵循此规则
+
+### JSON 数据模型结构
+```json
+{
+  "primitives": [...],    // 元素（panel 或 macro 如 box）
+  "connections": [...],   // 连接关系
+  "overrides": {...},     // 人工修改（AI 不应覆盖）
+  "decorations": {...},   // 面板装饰（开孔、雕刻）
+  "meta": {...}           // 名称、来源等
+}
+```
+
+### 接合类型（已注册）
+- `finger` — 指接榫（交替齿槽）
+- `tab-slot` — 插榫（间隔式）
+- `flat` — 平接（无轮廓）
+
+### AI 约束原则
+- AI 只做"选元素、填参数"的选择题
+- 结构计算、接合分配、几何展开由系统处理
+- 人工 override 必须保留，AI 不应覆盖
+
+## 模块依赖关系（从底到上）
+```
+Schema → ModelOps → JointKernel/Policies → MacroModels → Renderer
+```
+
+## 重要提醒
+- `js/core/` 下的代码是核心引擎，修改需谨慎
+- `js/` 根目录的 `box-generator.js`、`joint-utils.js` 等是旧实现，新代码应使用 `js/core/` 的对应模块
+- HTML 页面应该是"薄壳"，逻辑放在 JS 文件中

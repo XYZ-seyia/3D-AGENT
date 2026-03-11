@@ -39,6 +39,25 @@ export function normalizeEdgeStyle(style, fallbackKind = 'finger') {
 
 export function getBoxEdgeStyles(panelId, jointKind = 'finger', kerf = 0) {
   const resolvedKind = jointKind === 'tab' ? 'tab-slot' : jointKind;
+  if (resolvedKind === 'tab-slot' && (panelId === 'top' || panelId === 'bottom')) {
+    const flat = { jointKind: 'flat', edgeType: 'flat', kerf: 0 };
+    return { bottom: flat, right: flat, top: flat, left: flat };
+  }
+  if (resolvedKind === 'tab-slot') {
+    const lateralTypes = {
+      front: { right: 'A', left: 'A' },
+      back:  { right: 'A', left: 'A' },
+      left:  { right: 'B', left: 'B' },
+      right: { right: 'B', left: 'B' },
+    };
+    const lt = lateralTypes[panelId] || { right: 'A', left: 'A' };
+    return {
+      bottom: { jointKind: 'tab-slot', edgeType: 'A', kerf },
+      right:  { jointKind: 'finger', edgeType: lt.right, kerf },
+      top:    { jointKind: 'tab-slot', edgeType: 'A', kerf },
+      left:   { jointKind: 'finger', edgeType: lt.left, kerf },
+    };
+  }
   const specs = {
     front: { bottom: 'A', right: 'A', top: 'A', left: 'A' },
     back: { bottom: 'A', right: 'A', top: 'A', left: 'A' },

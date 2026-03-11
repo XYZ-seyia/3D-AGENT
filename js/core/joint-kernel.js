@@ -109,30 +109,35 @@ function buildFingerEdgePoints(start, end, outward, thickness, style) {
 
 function buildTabSlotEdgePoints(start, end, outward, thickness, style) {
   const edgeLength = distance2(start, end);
-  const tabCount = Math.max(2, Math.floor(edgeLength / 30));
-  const divisions = 2 * tabCount + 1;
-  const depth = resolveJointDepth({ thickness, kerf: style.kerf });
-  const segmentWidth = edgeLength / divisions;
-  const direction = normalize2([end[0] - start[0], end[1] - start[1]]);
-  const points = [];
+  if (edgeLength < 10) return [[start[0], start[1]]];
 
-  for (let index = 0; index < divisions; index++) {
-    const segmentStart = add2(start, scale2(direction, index * segmentWidth));
-    const segmentEnd = add2(start, scale2(direction, (index + 1) * segmentWidth));
-    const hasTab = style.edgeType === 'A' ? index % 2 === 1 : index % 2 === 0;
-    if (hasTab) {
-      points.push(
-        segmentStart,
-        add2(segmentStart, scale2(outward, depth)),
-        add2(segmentEnd, scale2(outward, depth)),
-        segmentEnd
-      );
-    } else {
-      points.push(segmentStart);
-    }
+  const direction = normalize2([end[0] - start[0], end[1] - start[1]]);
+  const depth = resolveJointDepth({ thickness, kerf: style.kerf });
+  const tabWidth = Math.max(2 * thickness, 6);
+  const tabCount = Math.max(2, Math.floor(edgeLength / 50));
+  const totalTabSpace = tabCount * tabWidth;
+  if (totalTabSpace > edgeLength) return [[start[0], start[1]]];
+  const gap = (edgeLength - totalTabSpace) / (tabCount + 1);
+  if (gap < 2) return [[start[0], start[1]]];
+
+  const isTabSide = style.edgeType === 'A';
+  const d = isTabSide ? depth : -depth;
+  const points = [[start[0], start[1]]];
+
+  for (let i = 0; i < tabCount; i++) {
+    const tabStart = gap * (i + 1) + tabWidth * i;
+    const tabEnd = tabStart + tabWidth;
+    const pStart = add2(start, scale2(direction, tabStart));
+    const pEnd = add2(start, scale2(direction, tabEnd));
+    points.push(
+      pStart,
+      add2(pStart, scale2(outward, d)),
+      add2(pEnd, scale2(outward, d)),
+      pEnd
+    );
   }
 
-  return points.map(pair => [pair[0], pair[1]]);
+  return points.map(p => [p[0], p[1]]);
 }
 
 function buildTabMortiseEdgePoints(start, end, outward, thickness, style) {

@@ -1,0 +1,50 @@
+---
+description: 编码约定和协作规范。在编写或修改代码时自动加载。
+globs:
+  - "**/*.js"
+  - "**/*.html"
+  - "**/*.css"
+alwaysApply: false
+---
+
+# 编码约定
+
+## 语言与模块
+- 使用原生 ES Modules（`import`/`export`），不使用 CommonJS
+- 不使用构建工具（无 webpack/vite/rollup）
+- Three.js 通过 HTML importmap 从 CDN 加载，JS 文件中直接 `import { ... } from 'three'`
+
+## 代码风格
+- 使用驼峰命名（camelCase），组件/类用帕斯卡（PascalCase）
+- 函数优先于类 — core 模块全部是纯函数，无状态
+- 缩进使用 2 空格
+- 字符串使用单引号
+- 使用 `const` / `let`，不用 `var`
+
+## core 模块规范
+- `js/core/` 中的函数必须是**无状态**的（纯函数，入参 model 返回新数据）
+- 新增导出函数必须在 `js/core/index.js` 中注册
+- 模块间依赖遵循层级：Schema → ModelOps → JointKernel/Policies → MacroModels → Renderer
+- 禁止下层依赖上层（如 schema.js 不能 import model-ops.js）
+
+## HTML 页面规范
+- HTML 页面应该是"薄壳"，只包含布局和 importmap
+- 业务逻辑提取到独立 JS 文件（如 `js/editor/editor-app.js`）
+- 样式提取到独立 CSS 文件（如 `css/editor.css`）
+
+## 新旧代码区分
+- ✅ 新功能使用 `js/core/` 的模块
+- ⛔ 不要在旧模块（`box-generator.js`、`joint-utils.js`）上添加新功能
+- 如果需要修改旧文件的 bug，可以修，但不扩展功能
+
+## Three.js 使用规范
+- 版本统一使用 0.160.0（通过 importmap）
+- 几何体使用 `ExtrudeGeometry` + `Shape`
+- 材质使用 `MeshStandardMaterial`
+- 面板网格通过 `joint-kernel.js` 的 `createPanelMesh` 创建
+
+## 与用户交流
+- 使用中文交流
+- 解释技术概念时用通俗语言，用户是产品经理不是程序员
+- 修改前先说明"要改哪个文件、为什么"
+- 修改后说明"改了什么、效果是什么"
